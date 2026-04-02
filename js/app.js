@@ -8,24 +8,20 @@ const TRENDING_QUERIES = [
 ];
 
 const MP4_QUALITIES = [
-  { v: '360', l: '360p', tag: 'Low' },
-  { v: '480', l: '480p', tag: 'SD' },
-  { v: '720', l: '720p', tag: 'HD' },
-  { v: '1080', l: '1080p', tag: 'Full HD' },
+  { v: '360', l: '360p (Low)' },
+  { v: '480', l: '480p (SD)' },
+  { v: '720', l: '720p (HD)' },
+  { v: '1080', l: '1080p (HD)' },
 ];
 
 // ── STATE ────────────────────────────────────────────────────────────────────
-let mode              = 'video';
-let currentQuery      = '';
-let videoNextToken    = null;
+let mode = 'video';           // 'video' | 'playlist'
+let currentQuery = '';
+let videoNextToken = null;
 let playlistNextToken = null;
-let currentNpbId      = null;
-let selectedQualities = {};
-
-// Modal state
-let modalVideoId  = null;
-let modalType     = null;   // 'mp3' | 'mp4'
-let modalExpanded = false;
+let currentNpbId = null;
+let activeStreams = {};        // videoId → 'mp3' | 'mp4' | null
+let selectedQualities = {};   // videoId → quality string
 
 // ── HELPERS ──────────────────────────────────────────────────────────────────
 function dec(html) {
@@ -35,24 +31,13 @@ function dec(html) {
 }
 
 function esc(str) {
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/'/g, '&#39;')
-    .replace(/"/g, '&quot;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+  return str.replace(/'/g, '&#39;').replace(/"/g, '&quot;');
 }
 
 async function apiFetch(url) {
   const r = await fetch(url);
   if (!r.ok) throw new Error('API error');
   return r.json();
-}
-
-function dlUrl(id, type, quality) {
-  let url = `${BASE}/download?url=${id}&type=${type}`;
-  if (quality && type === 'mp4') url += `&quality=${quality}`;
-  return url;
 }
 
 // ── MODE TOGGLE ───────────────────────────────────────────────────────────────
@@ -75,7 +60,10 @@ function handleSearch(e) {
 
 async function doSearch(q, reset) {
   currentQuery = q;
-  if (reset) { videoNextToken = null; playlistNextToken = null; }
+  if (reset) {
+    videoNextToken = null;
+    playlistNextToken = null;
+  }
 
   showTrending(false);
   showEmptyState(false);
@@ -83,14 +71,19 @@ async function doSearch(q, reset) {
 
   const sec = document.getElementById('results-section');
   if (reset) {
-    sec.innerHTML = `<div class="center-msg">
-      <div class="spinner${mode === 'playlist' ? ' purple' : ''}"></div>
-      <p>Searching…</p></div>`;
+    sec.innerHTML = `
+      <div class="center-msg">
+        <div class="spinner${mode === 'playlist' ? ' purple' : ''}"></div>
+        <p>Searching…</p>
+      </div>`;
   }
 
   try {
-    if (mode === 'video') await loadVideos(q, reset);
-    else await loadPlaylists(q, reset);
+    if (mode === 'video') {
+      await loadVideos(q, reset);
+    } else {
+      await loadPlaylists(q, reset);
+    }
   } catch (err) {
     sec.innerHTML = `<div class="center-msg" style="color:#e05252">Something went wrong. Please try again.</div>`;
   }
@@ -103,8 +96,11 @@ async function loadVideos(q, reset) {
 
   const data = await apiFetch(`${BASE}/search?${params}`);
   const items = (data.results ?? []).map(r => ({
-    videoId: r.videoId, title: dec(r.title),
-    thumbnail: r.thumbnail, channelTitle: r.channel ?? '', publishedAt: r.published ?? '',
+    videoId: r.videoId,
+    title: dec(r.title),
+    thumbnail: r.thumbnail,
+    channelTitle: r.channel ?? '',
+    publishedAt: r.published ?? '',
   }));
   videoNextToken = data.nextPageToken ?? null;
 
@@ -112,7 +108,7 @@ async function loadVideos(q, reset) {
   if (reset) sec.innerHTML = '';
 
   if (reset && items.length === 0) {
-    sec.innerHTML = `<p class="center-msg">No results found for "${esc(q)}"</p>`;
+    sec.innerHTML = `<p class="center-msg">No results found for "${q}"</p>`;
     return;
   }
 
@@ -120,8 +116,10 @@ async function loadVideos(q, reset) {
   if (!grid) {
     sec.insertAdjacentHTML('beforeend', `
       <div class="section-head">
-        <div class="section-icon">🎵</div><h3>Results</h3>
-      </div><div class="grid"></div>`);
+        <div class="section-icon">🎵</div>
+        <h3>Results</h3>
+      </div>
+      <div class="grid"></div>`);
     grid = sec.querySelector('.grid');
   }
 
@@ -132,7 +130,7 @@ async function loadVideos(q, reset) {
   if (videoNextToken) {
     sec.insertAdjacentHTML('beforeend', `
       <div class="load-more-wrap">
-        <button class="load-more-btn" onclick="doSearch('${esc(q)}',false)">Load More</button>
+        <button class="load-more-btn" onclick="doSearch('${esc(q)}', false)">Load More</button>
       </div>`);
   }
 }
@@ -144,8 +142,11 @@ async function loadPlaylists(q, reset) {
 
   const data = await apiFetch(`${BASE}/search?${params}`);
   const items = (data.results ?? []).map(r => ({
-    playlistId: r.videoId ?? '', title: dec(r.title),
-    thumbnail: r.thumbnail, channelTitle: r.channel ?? '', itemCount: r.itemCount,
+    playlistId: r.videoId ?? '',
+    title: dec(r.title),
+    thumbnail: r.thumbnail,
+    channelTitle: r.channel ?? '',
+    itemCount: r.itemCount,
   }));
   playlistNextToken = data.nextPageToken ?? null;
 
@@ -153,7 +154,7 @@ async function loadPlaylists(q, reset) {
   if (reset) sec.innerHTML = '';
 
   if (reset && items.length === 0) {
-    sec.innerHTML = `<p class="center-msg">No playlists found for "${esc(q)}"</p>`;
+    sec.innerHTML = `<p class="center-msg">No playlists found for "${q}"</p>`;
     return;
   }
 
@@ -161,8 +162,10 @@ async function loadPlaylists(q, reset) {
   if (!grid) {
     sec.insertAdjacentHTML('beforeend', `
       <div class="section-head">
-        <div class="section-icon purple">📋</div><h3>Playlists</h3>
-      </div><div class="grid"></div>`);
+        <div class="section-icon purple">📋</div>
+        <h3>Playlists</h3>
+      </div>
+      <div class="grid"></div>`);
     grid = sec.querySelector('.grid');
   }
 
@@ -173,7 +176,7 @@ async function loadPlaylists(q, reset) {
   if (playlistNextToken) {
     sec.insertAdjacentHTML('beforeend', `
       <div class="load-more-wrap">
-        <button class="load-more-btn purple" onclick="doSearch('${esc(q)}',false)">Load More</button>
+        <button class="load-more-btn purple" onclick="doSearch('${esc(q)}', false)">Load More</button>
       </div>`);
   }
 }
@@ -181,9 +184,13 @@ async function loadPlaylists(q, reset) {
 // ── VIDEO CARD HTML ───────────────────────────────────────────────────────────
 function videoCardHTML(v) {
   const id = v.videoId;
+  const qualityOptions = MP4_QUALITIES
+    .map(q => `<div class="quality-item" onclick="selectQuality('${id}','${q.v}',event)">${q.l}</div>`)
+    .join('');
+
   return `
     <div class="card" id="card-${id}" data-video-id="${id}">
-      <div class="thumb-wrap" onclick="openPlayer('${id}','mp4')">
+      <div class="thumb-wrap" onclick="streamVideo('${id}','mp4')">
         <img src="${esc(v.thumbnail)}" alt="${esc(v.title)}" loading="lazy" />
         <div class="thumb-overlay"><div class="play-circle">▶</div></div>
         <div class="now-badge" id="badge-${id}" style="display:none">♫ NOW PLAYING</div>
@@ -192,23 +199,21 @@ function videoCardHTML(v) {
         <div class="card-title">${esc(v.title)}</div>
         <div class="card-channel">${esc(v.channelTitle)}</div>
         <div class="action-row">
-          <button class="btn btn-stream-mp3" id="smp3-${id}" onclick="openPlayer('${id}','mp3')">🎵 Stream MP3</button>
-          <button class="btn btn-stream-mp4" id="smp4-${id}" onclick="openPlayer('${id}','mp4')">🎬 Stream MP4</button>
+          <button class="btn btn-stream-mp3" id="smp3-${id}" onclick="streamVideo('${id}','mp3')">🎵 Stream MP3</button>
+          <button class="btn btn-stream-mp4" id="smp4-${id}" onclick="streamVideo('${id}','mp4')">🎬 Stream MP4</button>
         </div>
         <div class="action-row">
-          <button class="btn btn-dl-mp3" onclick="window.open(dlUrl('${id}','mp3'),'_blank')">⬇ MP3</button>
+          <button class="btn btn-dl-mp3" onclick="dlVideo('${id}','mp3')">⬇ MP3</button>
           <div class="quality-wrap">
             <button class="btn btn-dl-mp4" style="width:100%" onclick="toggleQuality('${id}',event)">
               ⬇ MP4 <span id="qlabel-${id}">720p</span> ▾
             </button>
             <div class="quality-menu" id="qmenu-${id}">
-              ${MP4_QUALITIES.map(q => `
-                <div class="quality-item" onclick="selectQuality('${id}','${q.v}',event)">
-                  <span>${q.l}</span><span class="quality-tag">${q.tag}</span>
-                </div>`).join('')}
+              ${qualityOptions}
             </div>
           </div>
         </div>
+        <div id="player-${id}"></div>
       </div>
     </div>`;
 }
@@ -229,149 +234,92 @@ function playlistCardHTML(pl) {
     </div>`;
 }
 
-// ── PLAYER MODAL ─────────────────────────────────────────────────────────────
-function openPlayer(id, type) {
-  // Toggle off if already showing same video + type
-  const modal = document.getElementById('player-modal');
-  if (modalVideoId === id && modalType === type && modal.classList.contains('open')) {
-    closePlayerModal();
+// ── STREAMING ─────────────────────────────────────────────────────────────────
+function streamVideo(id, type) {
+  const playerEl = document.getElementById(`player-${id}`);
+  if (!playerEl) return;
+
+  // Toggle off if same type is already playing
+  if (activeStreams[id] === type) {
+    playerEl.innerHTML = '';
+    activeStreams[id] = null;
+    updateCardState(id, null);
+    if (currentNpbId === id) stopPlayer();
     return;
   }
 
-  modalVideoId  = id;
-  modalType     = type;
-  modalExpanded = false;
-
-  const card    = document.getElementById(`card-${id}`);
-  const title   = card?.querySelector('.card-title')?.textContent   || '';
-  const channel = card?.querySelector('.card-channel')?.textContent || '';
-  const thumb   = card?.querySelector('img')?.src                   || '';
-
-  const isAudio = type === 'mp3';
-
-  // Fill in details
-  document.getElementById('pm-title').textContent   = title;
-  document.getElementById('pm-channel').textContent = channel;
-  document.getElementById('pm-thumb').src           = thumb;
-
-  const badge = document.getElementById('pm-type-badge');
-  badge.textContent = isAudio ? '🎵 MP3 Audio' : '🎬 MP4 Video';
-  badge.className   = 'pm-type-badge ' + (isAudio ? 'green' : 'purple');
-
-  // Reset expand button
-  const expBtn = document.getElementById('pm-expand-btn');
-  expBtn.textContent = '⊞';
-  expBtn.title = 'Expand';
-
-  const thumbWrap = document.getElementById('pm-thumb-wrap');
-  const videoWrap = document.getElementById('pm-video-wrap');
-  const iframe    = document.getElementById('pm-iframe');
-
-  // Move the single iframe into the right container
-  if (isAudio) {
-    thumbWrap.style.display = 'flex';
-    videoWrap.style.display = 'none';
-    iframe.style.height = '100px';
-    thumbWrap.appendChild(iframe);
-  } else {
-    thumbWrap.style.display = 'none';
-    videoWrap.style.display = 'flex';
-    iframe.style.height = '100%';
-    videoWrap.appendChild(iframe);
-  }
-
-  // Set src after DOM placement so autoplay fires correctly
-  iframe.src = `https://www.youtube.com/embed/${id}?autoplay=1&rel=0`;
-
-  modal.classList.add('open');
-  modal.classList.remove('expanded');
-  document.body.style.overflow = 'hidden';
-
-  updateAllCardStates(id, type);
-  currentNpbId = id;
-  showNpb(id, thumb, title, channel);
-}
-
-function closePlayerModal() {
-  const modal = document.getElementById('player-modal');
-  modal.classList.remove('open', 'expanded');
-  document.getElementById('pm-iframe').src = '';
-  document.getElementById('pm-menu').classList.remove('open');
-  document.getElementById('pm-submenu').classList.remove('open');
-  document.body.style.overflow = '';
-  modalExpanded = false;
-
-  if (modalVideoId) updateAllCardStates(modalVideoId, null);
-  modalVideoId = null;
-  modalType    = null;
-  stopPlayer();
-}
-
-function toggleExpand() {
-  modalExpanded = !modalExpanded;
-  const modal  = document.getElementById('player-modal');
-  const expBtn = document.getElementById('pm-expand-btn');
-  modal.classList.toggle('expanded', modalExpanded);
-  expBtn.textContent = modalExpanded ? '⊡' : '⊞';
-  expBtn.title       = modalExpanded ? 'Shrink' : 'Expand';
-}
-
-// ── 3-DOT MENU ────────────────────────────────────────────────────────────────
-function toggleModalMenu(e) {
-  e.stopPropagation();
-  const menu = document.getElementById('pm-menu');
-  menu.classList.toggle('open');
-  // Close submenu if main menu closing
-  if (!menu.classList.contains('open')) {
-    document.getElementById('pm-submenu').classList.remove('open');
-  }
-}
-
-function toggleModalQualitySubmenu(e) {
-  e.stopPropagation();
-  document.getElementById('pm-submenu').classList.toggle('open');
-}
-
-function modalDlMp3(e) {
-  if (e) e.stopPropagation();
-  if (!modalVideoId) return;
-  window.open(dlUrl(modalVideoId, 'mp3'), '_blank');
-  document.getElementById('pm-menu').classList.remove('open');
-}
-
-function modalDlMp4(q, e) {
-  if (e) e.stopPropagation();
-  if (!modalVideoId) return;
-  const quality = q || selectedQualities[modalVideoId] || '720';
-  window.open(dlUrl(modalVideoId, 'mp4', quality), '_blank');
-  document.getElementById('pm-menu').classList.remove('open');
-  document.getElementById('pm-submenu').classList.remove('open');
-}
-
-// ── CARD STATE ────────────────────────────────────────────────────────────────
-function updateAllCardStates(activeId, type) {
-  document.querySelectorAll('.card[data-video-id]').forEach(card => {
-    const id      = card.dataset.videoId;
-    const isActive = id === activeId && !!type;
-    card.classList.toggle('playing', isActive);
-
-    const badge = document.getElementById(`badge-${id}`);
-    const s3    = document.getElementById(`smp3-${id}`);
-    const s4    = document.getElementById(`smp4-${id}`);
-
-    if (badge) badge.style.display = isActive ? '' : 'none';
-    if (s3) {
-      s3.classList.toggle('active', isActive && type === 'mp3');
-      s3.textContent = (isActive && type === 'mp3') ? '🎵 Playing' : '🎵 Stream MP3';
-    }
-    if (s4) {
-      s4.classList.toggle('active', isActive && type === 'mp4');
-      s4.textContent = (isActive && type === 'mp4') ? '🎬 Playing' : '🎬 Stream MP4';
+  // Close any other open streams
+  Object.keys(activeStreams).forEach(vid => {
+    if (vid !== id && activeStreams[vid]) {
+      const p = document.getElementById(`player-${vid}`);
+      if (p) p.innerHTML = '';
+      activeStreams[vid] = null;
+      updateCardState(vid, null);
     }
   });
+
+  activeStreams[id] = type;
+  updateCardState(id, type);
+  currentNpbId = id;
+
+  const iframeHeight = type === 'mp4' ? '220px' : '84px';
+  playerEl.innerHTML = `
+    <div class="inline-player">
+      <div class="inline-player-top">
+        <span class="inline-player-label">Now ${type === 'mp3' ? 'playing' : 'streaming'}: <span></span></span>
+        <button class="close-btn" onclick="closeStream('${id}')">✕</button>
+      </div>
+      <iframe
+        src="https://www.youtube.com/embed/${id}?autoplay=1&rel=0"
+        allow="autoplay; encrypted-media"
+        allowfullscreen
+        style="height:${iframeHeight}">
+      </iframe>
+    </div>`;
+
+  const card = document.getElementById(`card-${id}`);
+  const img = card?.querySelector('img')?.src || '';
+  const title = card?.querySelector('.card-title')?.textContent || '';
+  const channel = card?.querySelector('.card-channel')?.textContent || '';
+  showNpb(id, img, title, channel);
+
+  card?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
-// ── CARD DOWNLOAD QUALITY ─────────────────────────────────────────────────────
+function closeStream(id) {
+  const p = document.getElementById(`player-${id}`);
+  if (p) p.innerHTML = '';
+  activeStreams[id] = null;
+  updateCardState(id, null);
+  if (currentNpbId === id) stopPlayer();
+}
+
+function updateCardState(id, type) {
+  const card  = document.getElementById(`card-${id}`);
+  const badge = document.getElementById(`badge-${id}`);
+  const s3    = document.getElementById(`smp3-${id}`);
+  const s4    = document.getElementById(`smp4-${id}`);
+  if (!card) return;
+
+  card.classList.toggle('playing', !!type);
+  if (badge) badge.style.display = type ? '' : 'none';
+  if (s3) {
+    s3.classList.toggle('active', type === 'mp3');
+    s3.textContent = type === 'mp3' ? '🎵 Playing' : '🎵 Stream MP3';
+  }
+  if (s4) {
+    s4.classList.toggle('active', type === 'mp4');
+    s4.textContent = type === 'mp4' ? '🎬 Playing' : '🎬 Stream MP4';
+  }
+}
+
+// ── DOWNLOAD ──────────────────────────────────────────────────────────────────
+function dlVideo(id, type, quality) {
+  let url = `${BASE}/download?url=${id}&type=${type}`;
+  if (quality && type === 'mp4') url += `&quality=${quality}`;
+  window.open(url, '_blank');
+}
+
 function toggleQuality(id, e) {
   e.stopPropagation();
   const menu = document.getElementById(`qmenu-${id}`);
@@ -387,31 +335,21 @@ function selectQuality(id, q, e) {
   const label = document.getElementById(`qlabel-${id}`);
   if (label) label.textContent = q + 'p';
   document.getElementById(`qmenu-${id}`)?.classList.remove('open');
-  window.open(dlUrl(id, 'mp4', q), '_blank');
+  dlVideo(id, 'mp4', q);
 }
 
-// Close menus on outside click
+// Close quality menus on outside click
 document.addEventListener('click', () => {
   document.querySelectorAll('.quality-menu.open').forEach(m => m.classList.remove('open'));
-  const pmMenu = document.getElementById('pm-menu');
-  const pmSub  = document.getElementById('pm-submenu');
-  if (pmMenu && !pmMenu.matches(':hover')) {
-    pmMenu.classList.remove('open');
-    pmSub?.classList.remove('open');
-  }
-});
-
-// ESC key → close modal
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') closePlayerModal();
 });
 
 // ── NOW PLAYING BAR ───────────────────────────────────────────────────────────
 function showNpb(id, thumb, title, channel) {
   document.getElementById('npb-thumb').src = thumb;
-  document.getElementById('npb-title').textContent   = title;
+  document.getElementById('npb-title').textContent = title;
   document.getElementById('npb-channel').textContent = channel;
-  document.getElementById('npb-iframe').src = `https://www.youtube.com/embed/${id}?autoplay=1&rel=0`;
+  document.getElementById('npb-iframe').src =
+    `https://www.youtube.com/embed/${id}?autoplay=1&rel=0`;
   document.getElementById('now-playing-bar').classList.add('visible');
   document.body.classList.add('pb-bar');
 }
@@ -420,13 +358,14 @@ function stopPlayer() {
   document.getElementById('npb-iframe').src = '';
   document.getElementById('now-playing-bar').classList.remove('visible');
   document.body.classList.remove('pb-bar');
-  currentNpbId = null;
+  if (currentNpbId) {
+    const p = document.getElementById(`player-${currentNpbId}`);
+    if (p) p.innerHTML = '';
+    activeStreams[currentNpbId] = null;
+    updateCardState(currentNpbId, null);
+    currentNpbId = null;
+  }
 }
-
-// Click NPB info area → reopen modal
-document.getElementById('npb-reopen').addEventListener('click', () => {
-  if (currentNpbId && modalType) openPlayer(currentNpbId, modalType);
-});
 
 // ── PLAYLIST VIEWER ───────────────────────────────────────────────────────────
 async function openPlaylist(id, title) {
@@ -437,33 +376,46 @@ async function openPlaylist(id, title) {
   document.getElementById('playlist-count').textContent = '';
 
   const grid = document.getElementById('playlist-grid');
-  grid.innerHTML = `<div class="center-msg" style="grid-column:1/-1">
-    <div class="spinner purple"></div><p>Loading playlist…</p></div>`;
+  grid.innerHTML = `
+    <div class="center-msg" style="grid-column:1/-1">
+      <div class="spinner purple"></div>
+      <p>Loading playlist…</p>
+    </div>`;
 
   try {
     const params = new URLSearchParams({ id, maxResults: '50' });
     const data = await apiFetch(`${BASE}/playlist?${params}`);
-    const items = (data.videos ?? []).map(r => ({
-      videoId: r.videoId, title: dec(r.title),
-      thumbnail: r.thumbnail, channelTitle: r.channel ?? '', publishedAt: '',
+    const items = (data.videos ?? []).map((r, i) => ({
+      videoId: r.videoId,
+      title: dec(r.title),
+      thumbnail: r.thumbnail,
+      channelTitle: r.channel ?? '',
+      publishedAt: '',
     }));
+
     document.getElementById('playlist-count').textContent = `(${items.length} tracks)`;
     grid.innerHTML = items.map(v => videoCardHTML(v)).join('');
   } catch (e) {
-    grid.innerHTML = `<div class="center-msg" style="grid-column:1/-1;color:#e05252">Failed to load playlist.</div>`;
+    grid.innerHTML = `
+      <div class="center-msg" style="grid-column:1/-1;color:#e05252">
+        Failed to load playlist.
+      </div>`;
   }
 }
 
 function closePlaylist() {
   document.getElementById('playlist-viewer').classList.remove('visible');
   document.getElementById('results-section').style.display = '';
-  if (!currentQuery) document.getElementById('trending-section').style.display = '';
+  if (!currentQuery) {
+    document.getElementById('trending-section').style.display = '';
+  }
 }
 
 // ── TRENDING ──────────────────────────────────────────────────────────────────
 function showTrending(show) {
   document.getElementById('trending-section').style.display = show ? '' : 'none';
 }
+
 function showEmptyState(show) {
   document.getElementById('empty-state').style.display = show ? '' : 'none';
 }
@@ -474,9 +426,13 @@ async function loadTrending() {
     const params = new URLSearchParams({ q, type: 'video', maxResults: '8' });
     const data = await apiFetch(`${BASE}/search?${params}`);
     const items = (data.results ?? []).map(r => ({
-      videoId: r.videoId, title: dec(r.title),
-      thumbnail: r.thumbnail, channelTitle: r.channel ?? '', publishedAt: '',
+      videoId: r.videoId,
+      title: dec(r.title),
+      thumbnail: r.thumbnail,
+      channelTitle: r.channel ?? '',
+      publishedAt: '',
     }));
+
     document.getElementById('trending-loading').style.display = 'none';
     const grid = document.getElementById('trending-grid');
     if (items.length) {
