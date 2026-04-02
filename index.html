@@ -6,854 +6,108 @@
   <title>OBED TECH Music Site</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    :root {
-      --bg: #080c12;
-      --surface: #0f1520;
-      --card: #111827;
-      --border: #1e2a3a;
-      --text: #e8edf5;
-      --muted: #5a6a80;
-      --green: #00e5a0;
-      --green2: #00c4d4;
-      --purple: #9b5de5;
-      --purple2: #f15bb5;
-      --radius: 14px;
-    }
-
-    html { scroll-behavior: smooth; }
-
-    body {
-      font-family: 'DM Sans', sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      min-height: 100vh;
-      line-height: 1.5;
-    }
-
-    h1,h2,h3,h4 { font-family: 'Syne', sans-serif; }
-
-    /* ── SCROLLBAR ── */
-    ::-webkit-scrollbar { width: 5px; }
-    ::-webkit-scrollbar-track { background: var(--bg); }
-    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-
-    /* ── LAYOUT ── */
-    .container { max-width: 1280px; margin: 0 auto; padding: 0 20px; }
-
-    /* ── HEADER ── */
-    header {
-      position: sticky; top: 0; z-index: 100;
-      border-bottom: 1px solid var(--border);
-      background: rgba(8,12,18,0.85);
-      backdrop-filter: blur(20px);
-    }
-    .header-inner {
-      display: flex; align-items: center; justify-content: space-between;
-      height: 64px;
-    }
-    .logo { display: flex; align-items: center; gap: 12px; text-decoration: none; }
-    .logo-icon {
-      width: 38px; height: 38px; border-radius: 10px;
-      background: linear-gradient(135deg, var(--green), var(--green2));
-      display: flex; align-items: center; justify-content: center;
-      font-size: 18px; flex-shrink: 0;
-    }
-    .logo-text h1 { font-size: 16px; font-weight: 800; color: var(--text); line-height: 1; }
-    .logo-text p { font-size: 11px; color: var(--muted); }
-    .header-tag { font-size: 12px; color: var(--muted); display: none; }
-    @media(min-width:600px){ .header-tag { display: block; } }
-
-    /* ── HERO ── */
-    .hero {
-      text-align: center;
-      padding: 72px 20px 48px;
-    }
-    .hero-badge {
-      display: inline-flex; align-items: center; gap: 6px;
-      padding: 5px 14px; border-radius: 999px;
-      border: 1px solid rgba(0,229,160,0.25);
-      background: rgba(0,229,160,0.07);
-      color: var(--green); font-size: 12px; font-weight: 600;
-      margin-bottom: 22px;
-    }
-    .hero h2 {
-      font-size: clamp(28px, 5vw, 52px);
-      font-weight: 800; line-height: 1.1;
-      margin-bottom: 14px;
-    }
-    .hero h2 span {
-      background: linear-gradient(135deg, var(--green), var(--green2));
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }
-    .hero p { color: var(--muted); font-size: 15px; max-width: 440px; margin: 0 auto 32px; }
-
-    /* ── TOGGLE ── */
-    .toggle-wrap { display: flex; justify-content: center; gap: 8px; margin-bottom: 24px; }
-    .toggle-btn {
-      padding: 7px 18px; border-radius: 999px; border: 1px solid var(--border);
-      background: transparent; color: var(--muted); font-size: 13px; font-weight: 600;
-      font-family: 'DM Sans', sans-serif; cursor: pointer;
-      display: flex; align-items: center; gap-: 6px; gap: 6px;
-      transition: all 0.2s;
-    }
-    .toggle-btn.active-green {
-      background: linear-gradient(135deg, var(--green), var(--green2));
-      color: #080c12; border-color: transparent;
-    }
-    .toggle-btn.active-purple {
-      background: linear-gradient(135deg, var(--purple), var(--purple2));
-      color: #fff; border-color: transparent;
-    }
-
-    /* ── SEARCH ── */
-    .search-form { display: flex; gap: 10px; max-width: 620px; margin: 0 auto; }
-    .search-wrap { position: relative; flex: 1; }
-    .search-icon {
-      position: absolute; left: 16px; top: 50%; transform: translateY(-50%);
-      color: var(--muted); pointer-events: none; font-size: 15px;
-    }
-    .search-input {
-      width: 100%; height: 52px; padding: 0 16px 0 44px;
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: var(--radius); color: var(--text);
-      font-family: 'DM Sans', sans-serif; font-size: 14px;
-      outline: none; transition: border-color 0.2s;
-    }
-    .search-input:focus { border-color: var(--green); }
-    .search-input::placeholder { color: var(--muted); }
-    .search-btn {
-      height: 52px; padding: 0 28px; border-radius: var(--radius);
-      background: linear-gradient(135deg, var(--green), var(--green2));
-      color: #080c12; font-family: 'Syne', sans-serif;
-      font-weight: 700; font-size: 14px; border: none; cursor: pointer;
-      white-space: nowrap; transition: opacity 0.2s;
-    }
-    .search-btn:hover { opacity: 0.9; }
-    .search-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-
-    /* ── SECTION HEADER ── */
-    .section-head { display: flex; align-items: center; gap: 10px; margin-bottom: 24px; }
-    .section-icon {
-      width: 32px; height: 32px; border-radius: 8px;
-      display: flex; align-items: center; justify-content: center; font-size: 15px;
-      background: linear-gradient(135deg, var(--green), var(--green2));
-    }
-    .section-icon.purple { background: linear-gradient(135deg, var(--purple), var(--purple2)); }
-    .section-head h3 { font-size: 20px; font-weight: 700; }
-
-    /* ── GRID ── */
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-      gap: 20px;
-    }
-
-    /* ── CARD ── */
-    .card {
-      background: var(--card); border: 1px solid var(--border);
-      border-radius: var(--radius); overflow: hidden;
-      transition: border-color 0.25s, box-shadow 0.25s, transform 0.25s;
-      animation: slideUp 0.3s ease both;
-    }
-    .card:hover {
-      border-color: rgba(0,229,160,0.35);
-      box-shadow: 0 0 24px rgba(0,229,160,0.12);
-      transform: translateY(-2px);
-    }
-    .card.playing {
-      border-color: rgba(0,229,160,0.6);
-      box-shadow: 0 0 28px rgba(0,229,160,0.2);
-    }
-    .card.playlist-card:hover {
-      border-color: rgba(155,93,229,0.35);
-      box-shadow: 0 0 24px rgba(155,93,229,0.12);
-    }
-
-    /* thumbnail */
-    .thumb-wrap {
-      position: relative; aspect-ratio: 16/9; overflow: hidden; cursor: pointer;
-      background: var(--surface);
-    }
-    .thumb-wrap img {
-      width: 100%; height: 100%; object-fit: cover;
-      transition: transform 0.5s;
-    }
-    .card:hover .thumb-wrap img { transform: scale(1.06); }
-    .thumb-overlay {
-      position: absolute; inset: 0;
-      background: rgba(8,12,18,0.5);
-      display: flex; align-items: center; justify-content: center;
-      opacity: 0; transition: opacity 0.2s;
-    }
-    .card:hover .thumb-overlay { opacity: 1; }
-    .play-circle {
-      width: 50px; height: 50px; border-radius: 999px;
-      background: linear-gradient(135deg, var(--green), var(--green2));
-      display: flex; align-items: center; justify-content: center; font-size: 20px;
-    }
-    .play-circle.purple { background: linear-gradient(135deg, var(--purple), var(--purple2)); }
-    .now-badge {
-      position: absolute; top: 8px; left: 8px;
-      background: rgba(0,229,160,0.9);
-      color: #080c12; font-size: 9px; font-weight: 800;
-      padding: 3px 8px; border-radius: 999px;
-      display: flex; align-items: center; gap: 4px; letter-spacing: 0.5px;
-    }
-    .count-badge {
-      position: absolute; bottom: 8px; right: 8px;
-      background: rgba(8,12,18,0.8); backdrop-filter: blur(6px);
-      color: var(--text); font-size: 11px;
-      padding: 3px 8px; border-radius: 6px;
-      display: flex; align-items: center; gap: 4px;
-    }
-
-    /* card body */
-    .card-body { padding: 14px; }
-    .card-title {
-      font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 600;
-      line-height: 1.4; margin-bottom: 4px;
-      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-    }
-    .card-channel { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 12px; }
-
-    /* action rows */
-    .action-row { display: flex; gap: 6px; margin-bottom: 6px; }
-    .btn {
-      flex: 1; height: 34px; border-radius: 8px; border: none; cursor: pointer;
-      font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 600;
-      display: flex; align-items: center; justify-content: center; gap: 5px;
-      transition: all 0.2s;
-    }
-    .btn-stream-mp3 {
-      background: rgba(0,229,160,0.1); color: var(--green);
-    }
-    .btn-stream-mp3:hover, .btn-stream-mp3.active { background: linear-gradient(135deg, var(--green), var(--green2)); color: #080c12; }
-    .btn-stream-mp4 {
-      background: rgba(155,93,229,0.1); color: var(--purple);
-    }
-    .btn-stream-mp4:hover, .btn-stream-mp4.active { background: linear-gradient(135deg, var(--purple), var(--purple2)); color: #fff; }
-    .btn-dl-mp3 {
-      background: transparent; color: var(--green);
-      border: 1px solid rgba(0,229,160,0.3);
-    }
-    .btn-dl-mp3:hover { background: var(--green); color: #080c12; }
-    .btn-dl-mp4 {
-      background: transparent; color: var(--purple);
-      border: 1px solid rgba(155,93,229,0.3);
-      position: relative;
-    }
-    .btn-dl-mp4:hover { background: var(--purple); color: #fff; }
-
-    /* quality dropdown */
-    .quality-wrap { position: relative; flex: 1; }
-    .quality-menu {
-      display: none; position: absolute; bottom: 100%; right: 0; margin-bottom: 4px;
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: 10px; overflow: hidden; min-width: 130px; z-index: 50;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
-    }
-    .quality-menu.open { display: block; }
-    .quality-item {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 9px 14px; font-size: 12px; cursor: pointer;
-      transition: background 0.15s; color: var(--text);
-    }
-    .quality-item:hover { background: rgba(155,93,229,0.15); color: var(--purple); }
-    .quality-tag { font-size: 10px; color: var(--muted); }
-
-    /* inline player */
-    .inline-player {
-      border-top: 1px solid var(--border);
-      background: rgba(15,21,32,0.8);
-      padding: 10px 14px;
-      animation: slideUp 0.2s ease;
-    }
-    .inline-player-top {
-      display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;
-    }
-    .inline-player-label { font-size: 11px; color: var(--muted); }
-    .inline-player-label span { color: var(--text); }
-    .close-btn {
-      background: none; border: none; cursor: pointer; color: var(--muted);
-      font-size: 16px; line-height: 1; padding: 2px; transition: color 0.15s;
-    }
-    .close-btn:hover { color: var(--text); }
-    .inline-player iframe { width: 100%; border: none; border-radius: 8px; display: block; }
-
-    /* ── NOW PLAYING BAR ── */
-    #now-playing-bar {
-      position: fixed; bottom: 0; left: 0; right: 0; z-index: 200;
-      border-top: 1px solid var(--border);
-      background: rgba(11,17,26,0.95); backdrop-filter: blur(20px);
-      display: none;
-    }
-    #now-playing-bar.visible { display: block; }
-    .npb-inner {
-      display: flex; align-items: center; gap: 12px;
-      padding: 10px 20px; max-width: 1280px; margin: 0 auto;
-    }
-    .npb-thumb {
-      width: 48px; height: 48px; border-radius: 8px; object-fit: cover; flex-shrink: 0;
-    }
-    .npb-info { flex: 1; min-width: 0; }
-    .npb-title {
-      font-size: 13px; font-weight: 600; white-space: nowrap;
-      overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px;
-    }
-    .npb-channel { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .npb-embed { flex: 1; min-width: 0; max-width: 320px; display: none; }
-    @media(min-width:640px){ .npb-embed { display: block; } }
-    .npb-embed iframe { width: 100%; height: 44px; border: none; border-radius: 6px; display: block; }
-    .npb-close {
-      background: none; border: none; cursor: pointer;
-      color: var(--muted); font-size: 20px; padding: 4px;
-      flex-shrink: 0; transition: color 0.15s;
-    }
-    .npb-close:hover { color: var(--text); }
-
-    /* ── PLAYLIST VIEWER ── */
-    #playlist-viewer { display: none; }
-    #playlist-viewer.visible { display: block; }
-    .back-btn {
-      background: none; border: none; cursor: pointer;
-      color: var(--muted); font-size: 13px; font-weight: 600;
-      font-family: 'DM Sans', sans-serif;
-      display: flex; align-items: center; gap: 6px;
-      padding: 6px 0; transition: color 0.15s; margin-bottom: 20px;
-    }
-    .back-btn:hover { color: var(--text); }
-
-    /* ── LOAD MORE ── */
-    .load-more-wrap { display: flex; justify-content: center; margin-top: 32px; }
-    .load-more-btn {
-      padding: 11px 36px; border-radius: var(--radius);
-      background: linear-gradient(135deg, var(--green), var(--green2));
-      color: #080c12; font-family: 'Syne', sans-serif;
-      font-weight: 700; font-size: 13px; border: none; cursor: pointer;
-      transition: opacity 0.2s;
-    }
-    .load-more-btn:hover { opacity: 0.88; }
-    .load-more-btn.purple {
-      background: linear-gradient(135deg, var(--purple), var(--purple2));
-      color: #fff;
-    }
-
-    /* ── EMPTY / ERROR / LOADING ── */
-    .center-msg {
-      text-align: center; padding: 64px 20px; color: var(--muted); font-size: 14px;
-    }
-    .spinner {
-      width: 36px; height: 36px; border-radius: 50%;
-      border: 3px solid var(--border); border-top-color: var(--green);
-      animation: spin 0.75s linear infinite; margin: 0 auto 12px;
-    }
-    .spinner.purple { border-top-color: var(--purple); }
-    .empty-icon { font-size: 48px; opacity: 0.2; margin-bottom: 10px; }
-
-    /* ── FOOTER ── */
-    footer {
-      border-top: 1px solid var(--border);
-      text-align: center; padding: 24px 20px;
-      font-size: 12px; color: var(--muted);
-    }
-    footer span {
-      background: linear-gradient(135deg, var(--green), var(--green2));
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-      background-clip: text; font-weight: 700;
-    }
-
-    /* ── SECTIONS ── */
-    .section { padding-bottom: 48px; }
-    .pb-bar { padding-bottom: 88px; }
-
-    /* ── ANIMATIONS ── */
-    @keyframes slideUp {
-      from { opacity: 0; transform: translateY(16px); }
-      to   { opacity: 1; transform: translateY(0); }
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
-    .pulse { animation: pulse 2s ease infinite; }
-  </style>
+  <link rel="stylesheet" href="css/styles.css" />
 </head>
 <body>
 
-<!-- HEADER -->
-<header>
-  <div class="container header-inner">
-    <a class="logo" href="/">
-      <div class="logo-icon">🎵</div>
-      <div class="logo-text">
-        <h1>OBED TECH</h1>
-        <p>Music Site</p>
-      </div>
-    </a>
-    <p class="header-tag">Powered by <strong style="color:var(--green)">Obed Tech</strong></p>
-  </div>
-</header>
-
-<!-- HERO -->
-<section class="hero">
-  <div class="hero-badge">📈 Smart YT Downloader</div>
-  <h2>Download &amp; Stream <span>YouTube Music</span></h2>
-  <p>Search, stream, and download your favorite songs in MP3 or MP4 format — fast and free.</p>
-
-  <div class="toggle-wrap">
-    <button class="toggle-btn active-green" id="toggle-video" onclick="setMode('video')">🎵 Videos</button>
-    <button class="toggle-btn" id="toggle-playlist" onclick="setMode('playlist')">📋 Playlists</button>
-  </div>
-
-  <form class="search-form" onsubmit="handleSearch(event)">
-    <div class="search-wrap">
-      <span class="search-icon">🔍</span>
-      <input class="search-input" id="search-input" type="text"
-        placeholder="Search for songs, artists, or videos..." autocomplete="off" />
-    </div>
-    <button class="search-btn" id="search-btn" type="submit">Search</button>
-  </form>
-</section>
-
-<!-- MAIN CONTENT -->
-<main class="container" id="main">
-
-  <!-- PLAYLIST VIEWER -->
-  <div id="playlist-viewer">
-    <button class="back-btn" onclick="closePlaylist()">← Back</button>
-    <div class="section-head">
-      <div class="section-icon purple">📋</div>
-      <h3 id="playlist-title">Playlist</h3>
-      <span id="playlist-count" style="font-size:12px;color:var(--muted)"></span>
-    </div>
-    <div id="playlist-grid" class="grid"></div>
-  </div>
-
-  <!-- SEARCH RESULTS -->
-  <div id="results-section" class="section">
-    <!-- populated by JS -->
-  </div>
-
-  <!-- TRENDING (shown when no query) -->
-  <div id="trending-section" class="section">
-    <div class="section-head">
-      <div class="section-icon">📈</div>
-      <h3>Trending Now</h3>
-    </div>
-    <div id="trending-loading" class="center-msg">
-      <div class="spinner"></div>
-      <p>Loading trending music…</p>
-    </div>
-    <div id="trending-grid" class="grid" style="display:none"></div>
-  </div>
-
-  <!-- EMPTY STATE -->
-  <div id="empty-state" class="center-msg" style="display:none">
-    <div class="empty-icon pulse">🎵</div>
-    <p>Search for a song or playlist to get started</p>
-  </div>
-
-</main>
-
-<!-- NOW PLAYING BAR -->
-<div id="now-playing-bar">
-  <div class="npb-inner">
-    <img id="npb-thumb" class="npb-thumb" src="" alt="" />
-    <div class="npb-info">
-      <div class="npb-title" id="npb-title"></div>
-      <div class="npb-channel" id="npb-channel"></div>
-    </div>
-    <div class="npb-embed">
-      <iframe id="npb-iframe" src="" allow="autoplay; encrypted-media"></iframe>
-    </div>
-    <button class="npb-close" onclick="stopPlayer()">✕</button>
-  </div>
-</div>
-
-<!-- FOOTER -->
-<footer>
-  <p>© 2026 OBED TECH Music Site — Powered by <span>Obed Tech</span></p>
-</footer>
-
-<script>
-// ── CONFIG ──────────────────────────────────────────────────────────────────
-const BASE = 'https://ytapiv4.techobed4.workers.dev/api';
-const TRENDING_QUERIES = ['trending music 2026','top hits 2026','popular songs today'];
-const MP4_QUALITIES = [{v:'360',l:'360p (Low)'},{v:'480',l:'480p (SD)'},{v:'720',l:'720p (HD)'},{v:'1080',l:'1080p (HD)'}];
-
-// ── STATE ───────────────────────────────────────────────────────────────────
-let mode = 'video'; // 'video' | 'playlist'
-let currentQuery = '';
-let videoNextToken = null;
-let playlistNextToken = null;
-let currentNpbId = null;
-let activeStreams = {}; // videoId → 'mp3'|'mp4'|null
-
-// ── HELPERS ─────────────────────────────────────────────────────────────────
-function dec(html){
-  const t=document.createElement('textarea'); t.innerHTML=html; return t.value;
-}
-async function apiFetch(url){
-  const r = await fetch(url);
-  if(!r.ok) throw new Error('API error');
-  return r.json();
-}
-
-// ── MODE TOGGLE ─────────────────────────────────────────────────────────────
-function setMode(m){
-  mode = m;
-  document.getElementById('toggle-video').className = 'toggle-btn' + (m==='video'?' active-green':'');
-  document.getElementById('toggle-playlist').className = 'toggle-btn' + (m==='playlist'?' active-purple':'');
-  if(currentQuery) doSearch(currentQuery, true);
-}
-
-// ── SEARCH ───────────────────────────────────────────────────────────────────
-function handleSearch(e){
-  e.preventDefault();
-  const q = document.getElementById('search-input').value.trim();
-  if(!q) return;
-  doSearch(q, true);
-}
-
-async function doSearch(q, reset){
-  currentQuery = q;
-  if(reset){ videoNextToken = null; playlistNextToken = null; }
-
-  showTrending(false);
-  showEmptyState(false);
-  closePlaylist();
-
-  const sec = document.getElementById('results-section');
-  if(reset){
-    sec.innerHTML = `<div class="center-msg"><div class="spinner${mode==='playlist'?' purple':''}"></div><p>Searching…</p></div>`;
-  }
-
-  try {
-    if(mode === 'video'){
-      await loadVideos(q, reset);
-    } else {
-      await loadPlaylists(q, reset);
-    }
-  } catch(err){
-    sec.innerHTML = `<div class="center-msg" style="color:#e05252">Something went wrong. Please try again.</div>`;
-  }
-}
-
-async function loadVideos(q, reset){
-  const params = new URLSearchParams({q, type:'video', maxResults:'12'});
-  if(videoNextToken) params.set('pageToken', videoNextToken);
-  const data = await apiFetch(`${BASE}/search?${params}`);
-
-  const items = (data.results??[]).map(r=>({
-    videoId: r.videoId, title: dec(r.title),
-    thumbnail: r.thumbnail, channelTitle: r.channel??'', publishedAt: r.published??''
-  }));
-  videoNextToken = data.nextPageToken ?? null;
-
-  const sec = document.getElementById('results-section');
-  if(reset) sec.innerHTML = '';
-
-  if(reset && items.length===0){
-    sec.innerHTML = `<p class="center-msg">No results found for "${q}"</p>`; return;
-  }
-
-  let grid = sec.querySelector('.grid');
-  if(!grid){
-    const head = `<div class="section-head"><div class="section-icon">🎵</div><h3>Results</h3></div>`;
-    sec.insertAdjacentHTML('beforeend', head);
-    sec.insertAdjacentHTML('beforeend', '<div class="grid"></div>');
-    grid = sec.querySelector('.grid');
-  }
-
-  items.forEach(v => grid.insertAdjacentHTML('beforeend', videoCardHTML(v)));
-
-  // load more btn
-  const old = sec.querySelector('.load-more-wrap');
-  if(old) old.remove();
-  if(videoNextToken){
-    sec.insertAdjacentHTML('beforeend',
-      `<div class="load-more-wrap"><button class="load-more-btn" onclick="doSearch('${q}',false)">Load More</button></div>`);
-  }
-}
-
-async function loadPlaylists(q, reset){
-  const params = new URLSearchParams({q, type:'playlist', maxResults:'12'});
-  if(playlistNextToken) params.set('pageToken', playlistNextToken);
-  const data = await apiFetch(`${BASE}/search?${params}`);
-
-  const items = (data.results??[]).map(r=>({
-    playlistId: r.videoId??'', title: dec(r.title),
-    thumbnail: r.thumbnail, channelTitle: r.channel??'', itemCount: r.itemCount
-  }));
-  playlistNextToken = data.nextPageToken ?? null;
-
-  const sec = document.getElementById('results-section');
-  if(reset) sec.innerHTML = '';
-
-  if(reset && items.length===0){
-    sec.innerHTML = `<p class="center-msg">No playlists found for "${q}"</p>`; return;
-  }
-
-  let grid = sec.querySelector('.grid');
-  if(!grid){
-    const head = `<div class="section-head"><div class="section-icon purple">📋</div><h3>Playlists</h3></div>`;
-    sec.insertAdjacentHTML('beforeend', head);
-    sec.insertAdjacentHTML('beforeend', '<div class="grid"></div>');
-    grid = sec.querySelector('.grid');
-  }
-
-  items.forEach(pl => grid.insertAdjacentHTML('beforeend', playlistCardHTML(pl)));
-
-  const old = sec.querySelector('.load-more-wrap');
-  if(old) old.remove();
-  if(playlistNextToken){
-    sec.insertAdjacentHTML('beforeend',
-      `<div class="load-more-wrap"><button class="load-more-btn purple" onclick="doSearch('${currentQuery}',false)">Load More</button></div>`);
-  }
-}
-
-// ── VIDEO CARD HTML ──────────────────────────────────────────────────────────
-function videoCardHTML(v){
-  const id = v.videoId;
-  const esc = s => s.replace(/'/g,"&#39;").replace(/"/g,'&quot;');
-  return `
-  <div class="card" id="card-${id}" data-video-id="${id}">
-    <div class="thumb-wrap" onclick="streamVideo('${id}','mp4')">
-      <img src="${esc(v.thumbnail)}" alt="${esc(v.title)}" loading="lazy" />
-      <div class="thumb-overlay"><div class="play-circle">▶</div></div>
-      <div class="now-badge" id="badge-${id}" style="display:none">♫ NOW PLAYING</div>
-    </div>
-    <div class="card-body">
-      <div class="card-title">${esc(v.title)}</div>
-      <div class="card-channel">${esc(v.channelTitle)}</div>
-      <div class="action-row">
-        <button class="btn btn-stream-mp3" id="smp3-${id}" onclick="streamVideo('${id}','mp3')">🎵 Stream MP3</button>
-        <button class="btn btn-stream-mp4" id="smp4-${id}" onclick="streamVideo('${id}','mp4')">🎬 Stream MP4</button>
-      </div>
-      <div class="action-row">
-        <button class="btn btn-dl-mp3" onclick="dlVideo('${id}','mp3')">⬇ MP3</button>
-        <div class="quality-wrap">
-          <button class="btn btn-dl-mp4" style="width:100%" onclick="toggleQuality('${id}',event)">
-            ⬇ MP4 <span id="qlabel-${id}">720p</span> ▾
-          </button>
-          <div class="quality-menu" id="qmenu-${id}">
-            ${MP4_QUALITIES.map(q=>`<div class="quality-item" onclick="selectQuality('${id}','${q.v}',event)">${q.l}</div>`).join('')}
-          </div>
+  <!-- ── HEADER ── -->
+  <header>
+    <div class="container header-inner">
+      <a class="logo" href="/">
+        <div class="logo-icon">🎵</div>
+        <div class="logo-text">
+          <h1>OBED TECH</h1>
+          <p>Music Site</p>
         </div>
+      </a>
+      <p class="header-tag">Powered by <strong style="color:var(--green)">Obed Tech</strong></p>
+    </div>
+  </header>
+
+  <!-- ── HERO ── -->
+  <section class="hero">
+    <div class="hero-badge">📈 Smart YT Downloader</div>
+    <h2>Download &amp; Stream <span>YouTube Music</span></h2>
+    <p>Search, stream, and download your favorite songs in MP3 or MP4 format — fast and free.</p>
+
+    <div class="toggle-wrap">
+      <button class="toggle-btn active-green" id="toggle-video" onclick="setMode('video')">🎵 Videos</button>
+      <button class="toggle-btn" id="toggle-playlist" onclick="setMode('playlist')">📋 Playlists</button>
+    </div>
+
+    <form class="search-form" onsubmit="handleSearch(event)">
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input
+          class="search-input"
+          id="search-input"
+          type="text"
+          placeholder="Search for songs, artists, or videos..."
+          autocomplete="off"
+        />
       </div>
-      <div id="player-${id}"></div>
-    </div>
-  </div>`;
-}
+      <button class="search-btn" id="search-btn" type="submit">Search</button>
+    </form>
+  </section>
 
-// ── PLAYLIST CARD HTML ───────────────────────────────────────────────────────
-function playlistCardHTML(pl){
-  const esc = s => s.replace(/'/g,"&#39;").replace(/"/g,'&quot;');
-  return `
-  <div class="card playlist-card" onclick="openPlaylist('${pl.playlistId}','${esc(pl.title)}')">
-    <div class="thumb-wrap">
-      <img src="${esc(pl.thumbnail)}" alt="${esc(pl.title)}" loading="lazy" />
-      <div class="thumb-overlay"><div class="play-circle purple">📋</div></div>
-      ${pl.itemCount ? `<div class="count-badge">📋 ${pl.itemCount} videos</div>` : ''}
-    </div>
-    <div class="card-body">
-      <div class="card-title">${esc(pl.title)}</div>
-      <div class="card-channel">${esc(pl.channelTitle)}</div>
-    </div>
-  </div>`;
-}
+  <!-- ── MAIN CONTENT ── -->
+  <main class="container" id="main">
 
-// ── STREAMING ────────────────────────────────────────────────────────────────
-function streamVideo(id, type){
-  const playerEl = document.getElementById(`player-${id}`);
-  if(!playerEl) return;
-
-  const already = activeStreams[id];
-  // toggle off same type
-  if(already === type){
-    playerEl.innerHTML = '';
-    activeStreams[id] = null;
-    updateCardState(id, null);
-    if(currentNpbId === id) stopPlayer();
-    return;
-  }
-
-  // close others
-  Object.keys(activeStreams).forEach(vid => {
-    if(vid !== id && activeStreams[vid]){
-      const p = document.getElementById(`player-${vid}`);
-      if(p) p.innerHTML = '';
-      activeStreams[vid] = null;
-      updateCardState(vid, null);
-    }
-  });
-
-  activeStreams[id] = type;
-  updateCardState(id, type);
-  currentNpbId = id;
-
-  const h = type==='mp4' ? '220px' : '84px';
-  playerEl.innerHTML = `
-    <div class="inline-player">
-      <div class="inline-player-top">
-        <span class="inline-player-label">Now ${type==='mp3'?'playing':'streaming'}: <span></span></span>
-        <button class="close-btn" onclick="closeStream('${id}')">✕</button>
+    <!-- Playlist Viewer -->
+    <div id="playlist-viewer">
+      <button class="back-btn" onclick="closePlaylist()">← Back</button>
+      <div class="section-head">
+        <div class="section-icon purple">📋</div>
+        <h3 id="playlist-title">Playlist</h3>
+        <span id="playlist-count" style="font-size:12px;color:var(--muted)"></span>
       </div>
-      <iframe src="https://www.youtube.com/embed/${id}?autoplay=1&rel=0"
-        allow="autoplay; encrypted-media" allowfullscreen
-        style="height:${h}"></iframe>
-    </div>`;
+      <div id="playlist-grid" class="grid"></div>
+    </div>
 
-  // update now-playing bar
-  const card = document.getElementById(`card-${id}`);
-  const img = card?.querySelector('img')?.src || '';
-  const title = card?.querySelector('.card-title')?.textContent || '';
-  const channel = card?.querySelector('.card-channel')?.textContent || '';
-  showNpb(id, img, title, channel);
+    <!-- Search Results -->
+    <div id="results-section" class="section"></div>
 
-  // scroll card into view lightly
-  card?.scrollIntoView({behavior:'smooth', block:'nearest'});
-}
+    <!-- Trending (shown when no query) -->
+    <div id="trending-section" class="section">
+      <div class="section-head">
+        <div class="section-icon">📈</div>
+        <h3>Trending Now</h3>
+      </div>
+      <div id="trending-loading" class="center-msg">
+        <div class="spinner"></div>
+        <p>Loading trending music…</p>
+      </div>
+      <div id="trending-grid" class="grid" style="display:none"></div>
+    </div>
 
-function closeStream(id){
-  const p = document.getElementById(`player-${id}`);
-  if(p) p.innerHTML = '';
-  activeStreams[id] = null;
-  updateCardState(id, null);
-  if(currentNpbId === id) stopPlayer();
-}
+    <!-- Empty State -->
+    <div id="empty-state" class="center-msg" style="display:none">
+      <div class="empty-icon pulse">🎵</div>
+      <p>Search for a song or playlist to get started</p>
+    </div>
 
-function updateCardState(id, type){
-  const card = document.getElementById(`card-${id}`);
-  const badge = document.getElementById(`badge-${id}`);
-  const s3 = document.getElementById(`smp3-${id}`);
-  const s4 = document.getElementById(`smp4-${id}`);
-  if(!card) return;
-  card.classList.toggle('playing', !!type);
-  if(badge) badge.style.display = type ? '' : 'none';
-  if(s3){ s3.classList.toggle('active', type==='mp3'); s3.textContent = type==='mp3' ? '🎵 Playing' : '🎵 Stream MP3'; }
-  if(s4){ s4.classList.toggle('active', type==='mp4'); s4.textContent = type==='mp4' ? '🎬 Playing' : '🎬 Stream MP4'; }
-}
+  </main>
 
-// ── DOWNLOAD ─────────────────────────────────────────────────────────────────
-let selectedQualities = {};
+  <!-- ── NOW PLAYING BAR ── -->
+  <div id="now-playing-bar">
+    <div class="npb-inner">
+      <img id="npb-thumb" class="npb-thumb" src="" alt="" />
+      <div class="npb-info">
+        <div class="npb-title" id="npb-title"></div>
+        <div class="npb-channel" id="npb-channel"></div>
+      </div>
+      <div class="npb-embed">
+        <iframe id="npb-iframe" src="" allow="autoplay; encrypted-media"></iframe>
+      </div>
+      <button class="npb-close" onclick="stopPlayer()">✕</button>
+    </div>
+  </div>
 
-function dlVideo(id, type, quality){
-  let url = `${BASE}/download?url=${id}&type=${type}`;
-  if(quality && type==='mp4') url += `&quality=${quality}`;
-  window.open(url, '_blank');
-}
+  <!-- ── FOOTER ── -->
+  <footer>
+    <p>© 2026 OBED TECH Music Site — Powered by <span>Obed Tech</span></p>
+  </footer>
 
-function toggleQuality(id, e){
-  e.stopPropagation();
-  const menu = document.getElementById(`qmenu-${id}`);
-  document.querySelectorAll('.quality-menu.open').forEach(m=>{ if(m!==menu) m.classList.remove('open'); });
-  menu.classList.toggle('open');
-}
-
-function selectQuality(id, q, e){
-  e.stopPropagation();
-  selectedQualities[id] = q;
-  const label = document.getElementById(`qlabel-${id}`);
-  if(label) label.textContent = q+'p';
-  document.getElementById(`qmenu-${id}`)?.classList.remove('open');
-  dlVideo(id, 'mp4', q);
-}
-
-document.addEventListener('click', () => {
-  document.querySelectorAll('.quality-menu.open').forEach(m=>m.classList.remove('open'));
-});
-
-// ── NOW PLAYING BAR ──────────────────────────────────────────────────────────
-function showNpb(id, thumb, title, channel){
-  document.getElementById('npb-thumb').src = thumb;
-  document.getElementById('npb-title').textContent = title;
-  document.getElementById('npb-channel').textContent = channel;
-  document.getElementById('npb-iframe').src =
-    `https://www.youtube.com/embed/${id}?autoplay=1&rel=0`;
-  document.getElementById('now-playing-bar').classList.add('visible');
-  document.body.classList.add('pb-bar');
-}
-
-function stopPlayer(){
-  document.getElementById('npb-iframe').src = '';
-  document.getElementById('now-playing-bar').classList.remove('visible');
-  document.body.classList.remove('pb-bar');
-  if(currentNpbId){
-    const p = document.getElementById(`player-${currentNpbId}`);
-    if(p) p.innerHTML = '';
-    activeStreams[currentNpbId] = null;
-    updateCardState(currentNpbId, null);
-    currentNpbId = null;
-  }
-}
-
-// ── PLAYLIST VIEWER ──────────────────────────────────────────────────────────
-async function openPlaylist(id, title){
-  document.getElementById('playlist-viewer').classList.add('visible');
-  document.getElementById('results-section').style.display = 'none';
-  document.getElementById('trending-section').style.display = 'none';
-  document.getElementById('playlist-title').textContent = title;
-  document.getElementById('playlist-count').textContent = '';
-  const grid = document.getElementById('playlist-grid');
-  grid.innerHTML = `<div class="center-msg" style="grid-column:1/-1"><div class="spinner purple"></div><p>Loading playlist…</p></div>`;
-
-  try {
-    const params = new URLSearchParams({id, maxResults:'50'});
-    const data = await apiFetch(`${BASE}/playlist?${params}`);
-    const items = (data.videos??[]).map((r,i)=>({
-      videoId: r.videoId, title: dec(r.title),
-      thumbnail: r.thumbnail, channelTitle: r.channel??'', publishedAt:''
-    }));
-    document.getElementById('playlist-count').textContent = `(${items.length} tracks)`;
-    grid.innerHTML = items.map(v=>videoCardHTML(v)).join('');
-  } catch(e){
-    grid.innerHTML = `<div class="center-msg" style="grid-column:1/-1;color:#e05252">Failed to load playlist.</div>`;
-  }
-}
-
-function closePlaylist(){
-  document.getElementById('playlist-viewer').classList.remove('visible');
-  document.getElementById('results-section').style.display = '';
-  if(!currentQuery){
-    document.getElementById('trending-section').style.display = '';
-  }
-}
-
-// ── TRENDING ─────────────────────────────────────────────────────────────────
-function showTrending(show){
-  document.getElementById('trending-section').style.display = show ? '' : 'none';
-}
-function showEmptyState(show){
-  document.getElementById('empty-state').style.display = show ? '' : 'none';
-}
-
-async function loadTrending(){
-  const q = TRENDING_QUERIES[Math.floor(Math.random()*TRENDING_QUERIES.length)];
-  try {
-    const params = new URLSearchParams({q, type:'video', maxResults:'8'});
-    const data = await apiFetch(`${BASE}/search?${params}`);
-    const items = (data.results??[]).map(r=>({
-      videoId: r.videoId, title: dec(r.title),
-      thumbnail: r.thumbnail, channelTitle: r.channel??'', publishedAt:''
-    }));
-    const grid = document.getElementById('trending-grid');
-    document.getElementById('trending-loading').style.display = 'none';
-    if(items.length){
-      grid.style.display = '';
-      grid.innerHTML = items.map(v=>videoCardHTML(v)).join('');
-    }
-  } catch(e){
-    document.getElementById('trending-loading').innerHTML =
-      '<p style="color:var(--muted)">Could not load trending music.</p>';
-  }
-}
-
-// ── INIT ─────────────────────────────────────────────────────────────────────
-loadTrending();
-</script>
+  <script src="js/app.js"></script>
 </body>
 </html>
-```
