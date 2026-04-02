@@ -43,6 +43,17 @@ function esc(str) {
     .replace(/>/g, '&gt;');
 }
 
+// FIX: Safe escaping for strings embedded inside inline JS onclick attributes.
+// esc() converts ' to &#39; which breaks 'string' delimiters in HTML event attrs.
+function escAttr(str) {
+  return String(str)
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/"/g, '&quot;')
+    .replace(/\n/g, ' ')
+    .replace(/\r/g, '');
+}
+
 async function apiFetch(url) {
   const r = await fetch(url);
   if (!r.ok) throw new Error('API error');
@@ -85,7 +96,7 @@ async function doSearch(q, reset) {
   if (reset) {
     sec.innerHTML = `<div class="center-msg">
       <div class="spinner${mode === 'playlist' ? ' purple' : ''}"></div>
-      <p>Searching…</p></div>`;
+      <p>Searching...</p></div>`;
   }
 
   try {
@@ -132,7 +143,7 @@ async function loadVideos(q, reset) {
   if (videoNextToken) {
     sec.insertAdjacentHTML('beforeend', `
       <div class="load-more-wrap">
-        <button class="load-more-btn" onclick="doSearch('${esc(q)}',false)">Load More</button>
+        <button class="load-more-btn" onclick="doSearch('${escAttr(q)}',false)">Load More</button>
       </div>`);
   }
 }
@@ -173,7 +184,7 @@ async function loadPlaylists(q, reset) {
   if (playlistNextToken) {
     sec.insertAdjacentHTML('beforeend', `
       <div class="load-more-wrap">
-        <button class="load-more-btn purple" onclick="doSearch('${esc(q)}',false)">Load More</button>
+        <button class="load-more-btn purple" onclick="doSearch('${escAttr(q)}',false)">Load More</button>
       </div>`);
   }
 }
@@ -185,8 +196,8 @@ function videoCardHTML(v) {
     <div class="card" id="card-${id}" data-video-id="${id}">
       <div class="thumb-wrap" onclick="openPlayer('${id}','mp4')">
         <img src="${esc(v.thumbnail)}" alt="${esc(v.title)}" loading="lazy" />
-        <div class="thumb-overlay"><div class="play-circle">▶</div></div>
-        <div class="now-badge" id="badge-${id}" style="display:none">♫ NOW PLAYING</div>
+        <div class="thumb-overlay"><div class="play-circle">&#9658;</div></div>
+        <div class="now-badge" id="badge-${id}" style="display:none">&#9835; NOW PLAYING</div>
       </div>
       <div class="card-body">
         <div class="card-title">${esc(v.title)}</div>
@@ -196,10 +207,10 @@ function videoCardHTML(v) {
           <button class="btn btn-stream-mp4" id="smp4-${id}" onclick="openPlayer('${id}','mp4')">🎬 Stream MP4</button>
         </div>
         <div class="action-row">
-          <button class="btn btn-dl-mp3" onclick="window.open(dlUrl('${id}','mp3'),'_blank')">⬇ MP3</button>
+          <button class="btn btn-dl-mp3" onclick="window.open(dlUrl('${id}','mp3'),'_blank')">&#11015; MP3</button>
           <div class="quality-wrap">
             <button class="btn btn-dl-mp4" style="width:100%" onclick="toggleQuality('${id}',event)">
-              ⬇ MP4 <span id="qlabel-${id}">720p</span> ▾
+              &#11015; MP4 <span id="qlabel-${id}">720p</span> &#9660;
             </button>
             <div class="quality-menu" id="qmenu-${id}">
               ${MP4_QUALITIES.map(q => `
@@ -215,8 +226,10 @@ function videoCardHTML(v) {
 
 // ── PLAYLIST CARD HTML ────────────────────────────────────────────────────────
 function playlistCardHTML(pl) {
+  // FIX: use escAttr() for JS onclick string args; esc() converts ' to &#39;
+  // which breaks JS string delimiters when playlist titles contain apostrophes.
   return `
-    <div class="card playlist-card" onclick="openPlaylist('${pl.playlistId}','${esc(pl.title)}')">
+    <div class="card playlist-card" onclick="openPlaylist('${escAttr(pl.playlistId)}','${escAttr(pl.title)}')">
       <div class="thumb-wrap">
         <img src="${esc(pl.thumbnail)}" alt="${esc(pl.title)}" loading="lazy" />
         <div class="thumb-overlay"><div class="play-circle purple">📋</div></div>
@@ -231,7 +244,6 @@ function playlistCardHTML(pl) {
 
 // ── PLAYER MODAL ─────────────────────────────────────────────────────────────
 function openPlayer(id, type) {
-  // Toggle off if already showing same video + type
   const modal = document.getElementById('player-modal');
   if (modalVideoId === id && modalType === type && modal.classList.contains('open')) {
     closePlayerModal();
@@ -249,7 +261,6 @@ function openPlayer(id, type) {
 
   const isAudio = type === 'mp3';
 
-  // Fill in details
   document.getElementById('pm-title').textContent   = title;
   document.getElementById('pm-channel').textContent = channel;
   document.getElementById('pm-thumb').src           = thumb;
@@ -258,7 +269,6 @@ function openPlayer(id, type) {
   badge.textContent = isAudio ? '🎵 MP3 Audio' : '🎬 MP4 Video';
   badge.className   = 'pm-type-badge ' + (isAudio ? 'green' : 'purple');
 
-  // Reset expand button
   const expBtn = document.getElementById('pm-expand-btn');
   expBtn.textContent = '⊞';
   expBtn.title = 'Expand';
@@ -267,7 +277,6 @@ function openPlayer(id, type) {
   const videoWrap = document.getElementById('pm-video-wrap');
   const iframe    = document.getElementById('pm-iframe');
 
-  // Move the single iframe into the right container
   if (isAudio) {
     thumbWrap.style.display = 'flex';
     videoWrap.style.display = 'none';
@@ -280,16 +289,25 @@ function openPlayer(id, type) {
     videoWrap.appendChild(iframe);
   }
 
-  // Set src after DOM placement so autoplay fires correctly
   iframe.src = `https://www.youtube.com/embed/${id}?autoplay=1&rel=0`;
 
   modal.classList.add('open');
   modal.classList.remove('expanded');
+
+  // FIX: Compensate for scrollbar disappearing so page doesn't shift
+  const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+  document.body.style.paddingRight = scrollbarWidth + 'px';
   document.body.style.overflow = 'hidden';
 
   updateAllCardStates(id, type);
   currentNpbId = id;
-  showNpb(id, thumb, title, channel);
+
+  // FIX: Silence NPB iframe while modal is playing to prevent audio doubling
+  document.getElementById('npb-iframe').src = '';
+  document.getElementById('npb-thumb').src           = thumb;
+  document.getElementById('npb-title').textContent   = title;
+  document.getElementById('npb-channel').textContent = channel;
+  showNpbBar();
 }
 
 function closePlayerModal() {
@@ -298,13 +316,22 @@ function closePlayerModal() {
   document.getElementById('pm-iframe').src = '';
   document.getElementById('pm-menu').classList.remove('open');
   document.getElementById('pm-submenu').classList.remove('open');
+
+  // FIX: Restore overflow + padding compensation together
   document.body.style.overflow = '';
+  document.body.style.paddingRight = '';
+
   modalExpanded = false;
 
+  // FIX: Reset card states before nulling modalVideoId
   if (modalVideoId) updateAllCardStates(modalVideoId, null);
-  modalVideoId = null;
-  modalType    = null;
-  stopPlayer();
+
+  // FIX: Hand playback back to the NPB iframe so music continues after modal closes
+  if (currentNpbId) {
+    document.getElementById('npb-iframe').src =
+      `https://www.youtube.com/embed/${currentNpbId}?autoplay=1&rel=0`;
+  }
+  // Note: modalVideoId/modalType are intentionally kept so NPB reopen still works.
 }
 
 function toggleExpand() {
@@ -316,12 +343,16 @@ function toggleExpand() {
   expBtn.title       = modalExpanded ? 'Shrink' : 'Expand';
 }
 
+// FIX: Clicking the dark backdrop (outside pm-box) closes the modal
+document.getElementById('player-modal').addEventListener('click', function(e) {
+  if (e.target === this) closePlayerModal();
+});
+
 // ── 3-DOT MENU ────────────────────────────────────────────────────────────────
 function toggleModalMenu(e) {
   e.stopPropagation();
   const menu = document.getElementById('pm-menu');
   menu.classList.toggle('open');
-  // Close submenu if main menu closing
   if (!menu.classList.contains('open')) {
     document.getElementById('pm-submenu').classList.remove('open');
   }
@@ -351,7 +382,7 @@ function modalDlMp4(q, e) {
 // ── CARD STATE ────────────────────────────────────────────────────────────────
 function updateAllCardStates(activeId, type) {
   document.querySelectorAll('.card[data-video-id]').forEach(card => {
-    const id      = card.dataset.videoId;
+    const id       = card.dataset.videoId;
     const isActive = id === activeId && !!type;
     card.classList.toggle('playing', isActive);
 
@@ -359,7 +390,8 @@ function updateAllCardStates(activeId, type) {
     const s3    = document.getElementById(`smp3-${id}`);
     const s4    = document.getElementById(`smp4-${id}`);
 
-    if (badge) badge.style.display = isActive ? '' : 'none';
+    // FIX: Use explicit 'flex'/'none' instead of ''/'none' to guarantee correct state
+    if (badge) badge.style.display = isActive ? 'flex' : 'none';
     if (s3) {
       s3.classList.toggle('active', isActive && type === 'mp3');
       s3.textContent = (isActive && type === 'mp3') ? '🎵 Playing' : '🎵 Stream MP3';
@@ -387,15 +419,18 @@ function selectQuality(id, q, e) {
   const label = document.getElementById(`qlabel-${id}`);
   if (label) label.textContent = q + 'p';
   document.getElementById(`qmenu-${id}`)?.classList.remove('open');
-  window.open(dlUrl(id, 'mp4', q), '_blank');
+  // FIX: Removed auto-download on quality select. Now only updates the label;
+  // user must click the MP4 button again to confirm and trigger the download.
 }
 
 // Close menus on outside click
 document.addEventListener('click', () => {
   document.querySelectorAll('.quality-menu.open').forEach(m => m.classList.remove('open'));
+
+  // FIX: Replace unreliable :hover check with a simple classList check
   const pmMenu = document.getElementById('pm-menu');
   const pmSub  = document.getElementById('pm-submenu');
-  if (pmMenu && !pmMenu.matches(':hover')) {
+  if (pmMenu?.classList.contains('open')) {
     pmMenu.classList.remove('open');
     pmSub?.classList.remove('open');
   }
@@ -407,25 +442,38 @@ document.addEventListener('keydown', e => {
 });
 
 // ── NOW PLAYING BAR ───────────────────────────────────────────────────────────
-function showNpb(id, thumb, title, channel) {
-  document.getElementById('npb-thumb').src = thumb;
-  document.getElementById('npb-title').textContent   = title;
-  document.getElementById('npb-channel').textContent = channel;
-  document.getElementById('npb-iframe').src = `https://www.youtube.com/embed/${id}?autoplay=1&rel=0`;
+function showNpbBar() {
   document.getElementById('now-playing-bar').classList.add('visible');
   document.body.classList.add('pb-bar');
 }
 
 function stopPlayer() {
   document.getElementById('npb-iframe').src = '';
+  document.getElementById('pm-iframe').src  = '';
+
+  const modal = document.getElementById('player-modal');
+  if (modal.classList.contains('open')) {
+    modal.classList.remove('open', 'expanded');
+    document.body.style.overflow = '';
+    document.body.style.paddingRight = '';
+  }
+
   document.getElementById('now-playing-bar').classList.remove('visible');
   document.body.classList.remove('pb-bar');
+
+  // FIX: Clear all playback state so nothing lingers after stop
+  if (currentNpbId) updateAllCardStates(currentNpbId, null);
   currentNpbId = null;
+  modalVideoId = null;
+  modalType    = null;
 }
 
 // Click NPB info area → reopen modal
 document.getElementById('npb-reopen').addEventListener('click', () => {
-  if (currentNpbId && modalType) openPlayer(currentNpbId, modalType);
+  // FIX: Fallback chain ensures reopen works whether modal was closed or never opened
+  const id   = modalVideoId ?? currentNpbId;
+  const type = modalType    ?? 'mp4';
+  if (id) openPlayer(id, type);
 });
 
 // ── PLAYLIST VIEWER ───────────────────────────────────────────────────────────
@@ -438,7 +486,7 @@ async function openPlaylist(id, title) {
 
   const grid = document.getElementById('playlist-grid');
   grid.innerHTML = `<div class="center-msg" style="grid-column:1/-1">
-    <div class="spinner purple"></div><p>Loading playlist…</p></div>`;
+    <div class="spinner purple"></div><p>Loading playlist...</p></div>`;
 
   try {
     const params = new URLSearchParams({ id, maxResults: '50' });
