@@ -21,11 +21,15 @@ let videoNextToken    = null;
 let playlistNextToken = null;
 let currentNpbId      = null;
 let selectedQualities = {};
+let dlInProgress      = {};
 
 // Modal state
 let modalVideoId  = null;
-let modalType     = null;   // 'mp3' | 'mp4'
+let modalType     = null;
 let modalExpanded = false;
+let modalTitle    = '';
+let modalChannel  = '';
+let modalThumb    = '';
 
 // ── HELPERS ──────────────────────────────────────────────────────────────────
 function dec(html) {
@@ -43,8 +47,6 @@ function esc(str) {
     .replace(/>/g, '&gt;');
 }
 
-// FIX: Safe escaping for strings embedded inside inline JS onclick attributes.
-// esc() converts ' to &#39; which breaks 'string' delimiters in HTML event attrs.
 function escAttr(str) {
   return String(str)
     .replace(/\\/g, '\\\\')
@@ -60,10 +62,85 @@ async function apiFetch(url) {
   return r.json();
 }
 
+// Extract YouTube video ID from any YT URL
+function extractVideoId(input) {
+  input = input.trim();
+  if (/^[A-Za-z0-9_-]{11}$/.test(input)) return input;
+  let m = input.match(/youtu\.be\/([A-Za-z0-9_-]{11})/);
+  if (m) return m[1];
+  m = input.match(/(?:v=|\/embed\/|\/shorts\/|\/v\/)([A-Za-z0-9_-]{11})/);
+  if (m) return m[1];
+  return null;
+}
+
+// Extract YouTube playlist ID from URL
+function extractPlaylistId(input) {
+  const m = input.trim().match(/[?&]list=([A-Za-z0-9_-]+)/);
+  return m ? m[1] : null;
+}
+
 function dlUrl(id, type, quality) {
-  let url = `${BASE}/download?url=${id}&type=${type}`;
+  let url = `${BASE}/download?url=${encodeURIComponent(id)}&type=${type}`;
   if (quality && type === 'mp4') url += `&quality=${quality}`;
   return url;
+}
+
+// ── DOWNLOAD HANDLER ─────────────────────────────────────────────────────────
+async function triggerDownload(videoId, type, quality, btnEl) {
+  const key = videoId + type + (quality || '');
+  if (dlInProgress[key]) return;
+  dlInProgress[key] = true;
+
+  const origHTML = btnEl ? btnEl.innerHTML : '';
+  if (btnEl) {
+    btnEl.innerHTML = `<span class="dl-spinner"></span> Getting…`;
+    btnEl.disabled = true;
+  }
+
+  try {
+    const url = dlUrl(videoId, type, quality);
+    const resp = await fetch(url, { redirect: 'follow' });
+    if (!resp.ok) throw new Error('Download failed');
+
+    const contentType = resp.headers.get('content-type') || '';
+    let finalUrl = resp.url;
+
+    if (contentType.includes('application/json')) {
+      const data = await resp.json();
+      finalUrl = data.url || data.downloadUrl || data.link || resp.url;
+    }
+
+    const a = document.createElement('a');
+    a.href = finalUrl;
+    a.download = `${videoId}.${type === 'mp3' ? 'mp3' : 'mp4'}`;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    if (btnEl) {
+      btnEl.innerHTML = `✓ Done!`;
+      btnEl.classList.add('dl-success');
+      setTimeout(() => {
+        btnEl.innerHTML = origHTML;
+        btnEl.classList.remove('dl-success');
+        btnEl.disabled = false;
+      }, 2500);
+    }
+  } catch (err) {
+    if (btnEl) {
+      btnEl.innerHTML = `✗ Failed`;
+      btnEl.classList.add('dl-fail');
+      setTimeout(() => {
+        btnEl.innerHTML = origHTML;
+        btnEl.classList.remove('dl-fail');
+        btnEl.disabled = false;
+      }, 2500);
+    }
+  } finally {
+    dlInProgress[key] = false;
+  }
 }
 
 // ── MODE TOGGLE ───────────────────────────────────────────────────────────────
@@ -76,12 +153,66 @@ function setMode(m) {
   if (currentQuery) doSearch(currentQuery, true);
 }
 
-// ── SEARCH ────────────────────────────────────────────────────────────────────
+// ── SEARCH / LINK HANDLER ─────────────────────────────────────────────────────
 function handleSearch(e) {
   e.preventDefault();
-  const q = document.getElementById('search-input').value.trim();
-  if (!q) return;
-  doSearch(q, true);
+  const raw = document.getElementById('search-input').value.trim();
+  if (!raw) return;
+
+  // Is it a YouTube playlist URL?
+  const plId = extractPlaylistId(raw);
+  if (plId) {
+    openPlaylist(plId, 'YouTube Playlist');
+    return;
+  }
+
+  // Is it a YouTube video URL?
+  const vidId = extractVideoId(raw);
+  if (vidId && (raw.includes('youtu.be') || raw.includes('youtube.com'))) {
+    loadVideoById(vidId);
+    return;
+  }
+
+  // Regular text search
+  doSearch(raw, true);
+}
+
+// Load a single video by ID from a pasted link
+async function loadVideoById(videoId) {
+  showTrending(false);
+  showEmptyState(false);
+  closePlaylist();
+
+  const sec = document.getElementById('results-section');
+  sec.innerHTML = `<div class="center-msg"><div class="spinner"></div><p>Loading video…</p></div>`;
+
+  try {
+    const data = await apiFetch(`${BASE}/info?url=${encodeURIComponent(videoId)}`);
+    const item = {
+      videoId:      data.videoId || videoId,
+      title:        dec(data.title || 'YouTube Video'),
+      thumbnail:    data.thumbnail || `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+      channelTitle: data.channel || data.author || '',
+    };
+    sec.innerHTML = `
+      <div class="section-head">
+        <div class="section-icon">🔗</div><h3>Video from Link</h3>
+      </div>
+      <div class="grid single-card">${videoCardHTML(item)}</div>`;
+  } catch (err) {
+    // Fallback card using YT thumbnail
+    const item = {
+      videoId,
+      title:        'YouTube Video',
+      thumbnail:    `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+      channelTitle: '',
+    };
+    sec.innerHTML = `
+      <div class="section-head">
+        <div class="section-icon">🔗</div><h3>Video from Link</h3>
+      </div>
+      <div class="grid single-card">${videoCardHTML(item)}</div>`;
+  }
 }
 
 async function doSearch(q, reset) {
@@ -207,14 +338,14 @@ function videoCardHTML(v) {
           <button class="btn btn-stream-mp4" id="smp4-${id}" onclick="openPlayer('${id}','mp4')">🎬 Stream MP4</button>
         </div>
         <div class="action-row">
-          <button class="btn btn-dl-mp3" onclick="window.open(dlUrl('${id}','mp3'),'_blank')">&#11015; MP3</button>
+          <button class="btn btn-dl-mp3" onclick="triggerDownload('${id}','mp3',null,this)">⬇ MP3</button>
           <div class="quality-wrap">
             <button class="btn btn-dl-mp4" style="width:100%" onclick="toggleQuality('${id}',event)">
-              &#11015; MP4 <span id="qlabel-${id}">720p</span> &#9660;
+              ⬇ MP4 <span id="qlabel-${id}">720p</span> ▾
             </button>
             <div class="quality-menu" id="qmenu-${id}">
               ${MP4_QUALITIES.map(q => `
-                <div class="quality-item" onclick="selectQuality('${id}','${q.v}',event)">
+                <div class="quality-item" onclick="selectAndDownload('${id}','${q.v}',event)">
                   <span>${q.l}</span><span class="quality-tag">${q.tag}</span>
                 </div>`).join('')}
             </div>
@@ -226,8 +357,6 @@ function videoCardHTML(v) {
 
 // ── PLAYLIST CARD HTML ────────────────────────────────────────────────────────
 function playlistCardHTML(pl) {
-  // FIX: use escAttr() for JS onclick string args; esc() converts ' to &#39;
-  // which breaks JS string delimiters when playlist titles contain apostrophes.
   return `
     <div class="card playlist-card" onclick="openPlaylist('${escAttr(pl.playlistId)}','${escAttr(pl.title)}')">
       <div class="thumb-wrap">
@@ -254,24 +383,29 @@ function openPlayer(id, type) {
   modalType     = type;
   modalExpanded = false;
 
-  const card    = document.getElementById(`card-${id}`);
-  const title   = card?.querySelector('.card-title')?.textContent   || '';
-  const channel = card?.querySelector('.card-channel')?.textContent || '';
-  const thumb   = card?.querySelector('img')?.src                   || '';
+  const card   = document.getElementById(`card-${id}`);
+  modalTitle   = card?.querySelector('.card-title')?.textContent   || 'YouTube Video';
+  modalChannel = card?.querySelector('.card-channel')?.textContent || '';
+  modalThumb   = card?.querySelector('img')?.src || `https://img.youtube.com/vi/${id}/hqdefault.jpg`;
 
   const isAudio = type === 'mp3';
 
-  document.getElementById('pm-title').textContent   = title;
-  document.getElementById('pm-channel').textContent = channel;
-  document.getElementById('pm-thumb').src           = thumb;
+  document.getElementById('pm-title').textContent   = modalTitle;
+  document.getElementById('pm-channel').textContent = modalChannel;
+  document.getElementById('pm-thumb').src           = modalThumb;
 
   const badge = document.getElementById('pm-type-badge');
-  badge.textContent = isAudio ? '🎵 MP3 Audio' : '🎬 MP4 Video';
+  badge.textContent = isAudio ? '🎵 Audio' : '🎬 Video';
   badge.className   = 'pm-type-badge ' + (isAudio ? 'green' : 'purple');
 
+  // Reset expand
   const expBtn = document.getElementById('pm-expand-btn');
-  expBtn.textContent = '⊞';
-  expBtn.title = 'Expand';
+  expBtn.textContent = '⛶';
+  expBtn.title = 'Maximize';
+  modal.classList.remove('expanded');
+
+  // Render download buttons in the modal footer
+  renderModalDownloadBtns(id);
 
   const thumbWrap = document.getElementById('pm-thumb-wrap');
   const videoWrap = document.getElementById('pm-video-wrap');
@@ -280,7 +414,7 @@ function openPlayer(id, type) {
   if (isAudio) {
     thumbWrap.style.display = 'flex';
     videoWrap.style.display = 'none';
-    iframe.style.height = '100px';
+    iframe.style.height = '80px';
     thumbWrap.appendChild(iframe);
   } else {
     thumbWrap.style.display = 'none';
@@ -292,22 +426,47 @@ function openPlayer(id, type) {
   iframe.src = `https://www.youtube.com/embed/${id}?autoplay=1&rel=0`;
 
   modal.classList.add('open');
-  modal.classList.remove('expanded');
-
-  // FIX: Compensate for scrollbar disappearing so page doesn't shift
-  const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
-  document.body.style.paddingRight = scrollbarWidth + 'px';
-  document.body.style.overflow = 'hidden';
 
   updateAllCardStates(id, type);
   currentNpbId = id;
 
-  // FIX: Silence NPB iframe while modal is playing to prevent audio doubling
   document.getElementById('npb-iframe').src = '';
-  document.getElementById('npb-thumb').src           = thumb;
-  document.getElementById('npb-title').textContent   = title;
-  document.getElementById('npb-channel').textContent = channel;
+  document.getElementById('npb-thumb').src           = modalThumb;
+  document.getElementById('npb-title').textContent   = modalTitle;
+  document.getElementById('npb-channel').textContent = modalChannel;
   showNpbBar();
+}
+
+function renderModalDownloadBtns(id) {
+  const wrap = document.getElementById('pm-download-btns');
+  if (!wrap) return;
+  wrap.innerHTML = `
+    <button class="pm-dl-btn green" onclick="triggerDownload('${id}','mp3',null,this)">⬇ MP3</button>
+    <div class="pm-dl-quality-wrap">
+      <button class="pm-dl-btn purple" onclick="togglePmQuality(event)">
+        ⬇ MP4 <span id="pm-qlabel">720p</span> ▾
+      </button>
+      <div class="pm-dl-quality-menu" id="pm-dl-qmenu">
+        ${MP4_QUALITIES.map(q => `
+          <div class="quality-item" onclick="pmSelectAndDownload('${id}','${q.v}',event)">
+            <span>${q.l}</span><span class="quality-tag">${q.tag}</span>
+          </div>`).join('')}
+      </div>
+    </div>`;
+}
+
+function togglePmQuality(e) {
+  e.stopPropagation();
+  document.getElementById('pm-dl-qmenu')?.classList.toggle('open');
+}
+
+function pmSelectAndDownload(id, q, e) {
+  e.stopPropagation();
+  const label = document.getElementById('pm-qlabel');
+  if (label) label.textContent = q + 'p';
+  document.getElementById('pm-dl-qmenu')?.classList.remove('open');
+  const btn = e.target.closest('.pm-dl-quality-wrap')?.querySelector('.pm-dl-btn');
+  triggerDownload(id, 'mp4', q, btn);
 }
 
 function closePlayerModal() {
@@ -316,22 +475,15 @@ function closePlayerModal() {
   document.getElementById('pm-iframe').src = '';
   document.getElementById('pm-menu').classList.remove('open');
   document.getElementById('pm-submenu').classList.remove('open');
-
-  // FIX: Restore overflow + padding compensation together
-  document.body.style.overflow = '';
-  document.body.style.paddingRight = '';
-
+  document.getElementById('pm-dl-qmenu')?.classList.remove('open');
   modalExpanded = false;
 
-  // FIX: Reset card states before nulling modalVideoId
   if (modalVideoId) updateAllCardStates(modalVideoId, null);
 
-  // FIX: Hand playback back to the NPB iframe so music continues after modal closes
   if (currentNpbId) {
     document.getElementById('npb-iframe').src =
       `https://www.youtube.com/embed/${currentNpbId}?autoplay=1&rel=0`;
   }
-  // Note: modalVideoId/modalType are intentionally kept so NPB reopen still works.
 }
 
 function toggleExpand() {
@@ -339,11 +491,10 @@ function toggleExpand() {
   const modal  = document.getElementById('player-modal');
   const expBtn = document.getElementById('pm-expand-btn');
   modal.classList.toggle('expanded', modalExpanded);
-  expBtn.textContent = modalExpanded ? '⊡' : '⊞';
-  expBtn.title       = modalExpanded ? 'Shrink' : 'Expand';
+  expBtn.textContent = modalExpanded ? '⊡' : '⛶';
+  expBtn.title       = modalExpanded ? 'Restore' : 'Maximize';
 }
 
-// FIX: Clicking the dark backdrop (outside pm-box) closes the modal
 document.getElementById('player-modal').addEventListener('click', function(e) {
   if (e.target === this) closePlayerModal();
 });
@@ -366,15 +517,14 @@ function toggleModalQualitySubmenu(e) {
 function modalDlMp3(e) {
   if (e) e.stopPropagation();
   if (!modalVideoId) return;
-  window.open(dlUrl(modalVideoId, 'mp3'), '_blank');
+  triggerDownload(modalVideoId, 'mp3', null, e?.target);
   document.getElementById('pm-menu').classList.remove('open');
 }
 
 function modalDlMp4(q, e) {
   if (e) e.stopPropagation();
   if (!modalVideoId) return;
-  const quality = q || selectedQualities[modalVideoId] || '720';
-  window.open(dlUrl(modalVideoId, 'mp4', quality), '_blank');
+  triggerDownload(modalVideoId, 'mp4', q || '720', null);
   document.getElementById('pm-menu').classList.remove('open');
   document.getElementById('pm-submenu').classList.remove('open');
 }
@@ -390,7 +540,6 @@ function updateAllCardStates(activeId, type) {
     const s3    = document.getElementById(`smp3-${id}`);
     const s4    = document.getElementById(`smp4-${id}`);
 
-    // FIX: Use explicit 'flex'/'none' instead of ''/'none' to guarantee correct state
     if (badge) badge.style.display = isActive ? 'flex' : 'none';
     if (s3) {
       s3.classList.toggle('active', isActive && type === 'mp3');
@@ -413,21 +562,21 @@ function toggleQuality(id, e) {
   menu.classList.toggle('open');
 }
 
-function selectQuality(id, q, e) {
+function selectAndDownload(id, q, e) {
   e.stopPropagation();
   selectedQualities[id] = q;
   const label = document.getElementById(`qlabel-${id}`);
   if (label) label.textContent = q + 'p';
   document.getElementById(`qmenu-${id}`)?.classList.remove('open');
-  // FIX: Removed auto-download on quality select. Now only updates the label;
-  // user must click the MP4 button again to confirm and trigger the download.
+  const card = document.getElementById(`card-${id}`);
+  const btn  = card?.querySelector('.btn-dl-mp4');
+  triggerDownload(id, 'mp4', q, btn);
 }
 
-// Close menus on outside click
+// Close all menus on outside click
 document.addEventListener('click', () => {
-  document.querySelectorAll('.quality-menu.open').forEach(m => m.classList.remove('open'));
-
-  // FIX: Replace unreliable :hover check with a simple classList check
+  document.querySelectorAll('.quality-menu.open, .pm-dl-quality-menu.open')
+    .forEach(m => m.classList.remove('open'));
   const pmMenu = document.getElementById('pm-menu');
   const pmSub  = document.getElementById('pm-submenu');
   if (pmMenu?.classList.contains('open')) {
@@ -436,7 +585,6 @@ document.addEventListener('click', () => {
   }
 });
 
-// ESC key → close modal
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') closePlayerModal();
 });
@@ -454,23 +602,18 @@ function stopPlayer() {
   const modal = document.getElementById('player-modal');
   if (modal.classList.contains('open')) {
     modal.classList.remove('open', 'expanded');
-    document.body.style.overflow = '';
-    document.body.style.paddingRight = '';
   }
 
   document.getElementById('now-playing-bar').classList.remove('visible');
   document.body.classList.remove('pb-bar');
 
-  // FIX: Clear all playback state so nothing lingers after stop
   if (currentNpbId) updateAllCardStates(currentNpbId, null);
   currentNpbId = null;
   modalVideoId = null;
   modalType    = null;
 }
 
-// Click NPB info area → reopen modal
 document.getElementById('npb-reopen').addEventListener('click', () => {
-  // FIX: Fallback chain ensures reopen works whether modal was closed or never opened
   const id   = modalVideoId ?? currentNpbId;
   const type = modalType    ?? 'mp4';
   if (id) openPlayer(id, type);
