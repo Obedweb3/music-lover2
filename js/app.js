@@ -79,41 +79,95 @@ function extractPlaylistId(input) {
   return m ? m[1] : null;
 }
 
-function dlUrl(id, type, quality) {
-  // redirect=1 makes the API redirect straight to the media file
-  let url = `${BASE}/download?url=${id}&type=${type}&redirect=1`;
-  if (quality && type === 'mp4') url += `&quality=${quality}`;
-  return url;
-}
+// ── DOWNLOAD — uses cobalt.tools public API (free, no key needed) ────────────
+// cobalt.tools is open source and actively maintained.
+// Docs: https://github.com/imputnet/cobalt
+const COBALT = 'https://api.cobalt.tools';
 
-// ── DOWNLOAD HANDLER ─────────────────────────────────────────────────────────
-// redirect=1 means the API does a 302 straight to the file.
-// We open it in a new tab — browser receives the redirect and saves the file.
-function triggerDownload(videoId, type, quality, btnEl) {
+// Quality map: our labels → cobalt videoQuality values
+const COBALT_QUALITY = { '360': '360', '480': '480', '720': '720', '1080': '1080' };
+
+async function triggerDownload(videoId, type, quality, btnEl) {
   const key = videoId + type + (quality || '');
   if (dlInProgress[key]) return;
   dlInProgress[key] = true;
 
   const origHTML = btnEl ? btnEl.innerHTML : '';
   if (btnEl) {
-    btnEl.innerHTML = `<span class="dl-spinner"></span> Starting…`;
+    btnEl.innerHTML = `<span class="dl-spinner"></span> Fetching…`;
     btnEl.disabled = true;
   }
 
-  const url = dlUrl(videoId, type, quality || (type === 'mp4' ? '720' : null));
-  window.open(url, '_blank', 'noopener,noreferrer');
+  const ytUrl = `https://www.youtube.com/watch?v=${videoId}`;
 
-  if (btnEl) {
-    btnEl.innerHTML = `✓ Downloading!`;
-    btnEl.classList.add('dl-success');
-    setTimeout(() => {
-      btnEl.innerHTML = origHTML;
-      btnEl.classList.remove('dl-success');
-      btnEl.disabled = false;
+  try {
+    const body = {
+      url: ytUrl,
+      downloadMode: type === 'mp3' ? 'audio' : 'auto',
+      videoQuality: COBALT_QUALITY[quality] || '720',
+      audioFormat: type === 'mp3' ? 'mp3' : 'best',
+      filenameStyle: 'pretty',
+    };
+
+    const resp = await fetch(COBALT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+
+    const data = await resp.json();
+
+    // cobalt returns { status: 'stream'|'redirect'|'tunnel'|'picker', url, ... }
+    if (data.status === 'error') throw new Error(data.error?.code || 'cobalt error');
+
+    const fileUrl = data.url || (data.picker && data.picker[0]?.url);
+    if (!fileUrl) throw new Error('No URL returned');
+
+    // Trigger download via hidden anchor
+    const a = document.createElement('a');
+    a.href = fileUrl;
+    a.download = '';
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    if (btnEl) {
+      btnEl.innerHTML = '✓ Downloading!';
+      btnEl.classList.add('dl-success');
+      setTimeout(() => {
+        btnEl.innerHTML = origHTML;
+        btnEl.classList.remove('dl-success');
+        btnEl.disabled = false;
+        dlInProgress[key] = false;
+      }, 3000);
+    } else {
       dlInProgress[key] = false;
-    }, 3000);
-  } else {
-    dlInProgress[key] = false;
+    }
+
+  } catch (err) {
+    console.warn('cobalt failed, falling back to y2mate redirect:', err);
+
+    // Fallback: open y2mate with the video pre-filled — user clicks one button
+    const fallback = `https://www.y2mate.com/youtube/${videoId}`;
+    window.open(fallback, '_blank', 'noopener,noreferrer');
+
+    if (btnEl) {
+      btnEl.innerHTML = '↗ Opened';
+      btnEl.classList.add('dl-success');
+      setTimeout(() => {
+        btnEl.innerHTML = origHTML;
+        btnEl.classList.remove('dl-success');
+        btnEl.disabled = false;
+        dlInProgress[key] = false;
+      }, 3000);
+    } else {
+      dlInProgress[key] = false;
+    }
   }
 }
 
