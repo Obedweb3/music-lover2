@@ -80,91 +80,39 @@ function extractPlaylistId(input) {
 }
 
 function dlUrl(id, type, quality) {
-  // Pass the full YouTube URL so the API can resolve it unambiguously
-  const ytUrl = `https://www.youtube.com/watch?v=${id}`;
-  let url = `${BASE}/download?url=${encodeURIComponent(ytUrl)}&type=${type}`;
+  // redirect=1 makes the API redirect straight to the media file
+  let url = `${BASE}/download?url=${id}&type=${type}&redirect=1`;
   if (quality && type === 'mp4') url += `&quality=${quality}`;
   return url;
 }
 
 // ── DOWNLOAD HANDLER ─────────────────────────────────────────────────────────
-// Strategy:
-//   1. Fetch the download endpoint as JSON — if the API returns { url, filename }
-//      we use that direct link. This avoids CORS issues with binary streams.
-//   2. If the response is NOT JSON (i.e. the API streams the file directly or
-//      redirects), we fall back to opening the endpoint URL in a new tab so the
-//      browser handles the download natively.
-async function triggerDownload(videoId, type, quality, btnEl) {
+// redirect=1 means the API does a 302 straight to the file.
+// We open it in a new tab — browser receives the redirect and saves the file.
+function triggerDownload(videoId, type, quality, btnEl) {
   const key = videoId + type + (quality || '');
   if (dlInProgress[key]) return;
   dlInProgress[key] = true;
 
   const origHTML = btnEl ? btnEl.innerHTML : '';
   if (btnEl) {
-    btnEl.innerHTML = `<span class="dl-spinner"></span> Preparing…`;
+    btnEl.innerHTML = `<span class="dl-spinner"></span> Starting…`;
     btnEl.disabled = true;
   }
 
-  const ext = type === 'mp3' ? 'mp3' : 'mp4';
-  const endpoint = dlUrl(videoId, type, quality || '720');
+  const url = dlUrl(videoId, type, quality || (type === 'mp4' ? '720' : null));
+  window.open(url, '_blank', 'noopener,noreferrer');
 
-  try {
-    // Step 1 — ask the API for download info (JSON expected from fixed endpoint)
-    const resp = await fetch(endpoint);
-
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-
-    const contentType = resp.headers.get('content-type') || '';
-
-    if (contentType.includes('application/json')) {
-      // API returned JSON — extract the direct download URL
-      const data = await resp.json();
-      const fileUrl = data.url || data.downloadUrl || data.download_url
-                   || data.link || data.fileUrl || data.file_url;
-
-      if (!fileUrl) throw new Error('No URL in response');
-
-      // Use an <a download> pointing at the direct file URL
-      const a = document.createElement('a');
-      a.href = fileUrl;
-      a.download = data.filename || `${videoId}.${ext}`;
-      a.target = '_blank';
-      a.rel = 'noopener noreferrer';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-
-    } else {
-      // API streams the file or redirects — open in new tab so browser downloads it
-      window.open(endpoint, '_blank', 'noopener,noreferrer');
-    }
-
-    // Success feedback
-    if (btnEl) {
-      btnEl.innerHTML = `✓ Downloading!`;
-      btnEl.classList.add('dl-success');
-      setTimeout(() => {
-        btnEl.innerHTML = origHTML;
-        btnEl.classList.remove('dl-success');
-        btnEl.disabled = false;
-      }, 3000);
-    }
-
-  } catch (err) {
-    console.error('Download error:', err);
-    // Final fallback — just open the endpoint directly
-    window.open(endpoint, '_blank', 'noopener,noreferrer');
-
-    if (btnEl) {
-      btnEl.innerHTML = `↗ Opened`;
-      btnEl.classList.add('dl-success');
-      setTimeout(() => {
-        btnEl.innerHTML = origHTML;
-        btnEl.classList.remove('dl-success');
-        btnEl.disabled = false;
-      }, 3000);
-    }
-  } finally {
+  if (btnEl) {
+    btnEl.innerHTML = `✓ Downloading!`;
+    btnEl.classList.add('dl-success');
+    setTimeout(() => {
+      btnEl.innerHTML = origHTML;
+      btnEl.classList.remove('dl-success');
+      btnEl.disabled = false;
+      dlInProgress[key] = false;
+    }, 3000);
+  } else {
     dlInProgress[key] = false;
   }
 }
