@@ -80,101 +80,38 @@ function extractPlaylistId(input) {
 }
 
 // ── DOWNLOAD ─────────────────────────────────────────────────────────────────
-// Tries your own API first (ready for when it's fixed).
-// While the API is down, shows a download toast with a working direct link.
+// API uses redirect=1 — server does a 302 straight to the media file.
+// window.open() lets the browser follow the redirect and save the file natively.
 
-async function triggerDownload(videoId, type, quality, btnEl) {
+function triggerDownload(videoId, type, quality, btnEl) {
   const key = videoId + type + (quality || '');
   if (dlInProgress[key]) return;
   dlInProgress[key] = true;
 
   const origHTML = btnEl ? btnEl.innerHTML : '';
   if (btnEl) {
-    btnEl.innerHTML = `<span class="dl-spinner"></span> Fetching…`;
+    btnEl.innerHTML = `<span class="dl-spinner"></span> Starting…`;
     btnEl.disabled = true;
   }
 
   const q = quality || (type === 'mp4' ? '720' : null);
-  let apiUrl = `${BASE}/download?url=${videoId}&type=${type}&redirect=1`;
-  if (q && type === 'mp4') apiUrl += `&quality=${q}`;
+  let url = `${BASE}/download?url=${videoId}&type=${type}&redirect=1`;
+  if (q && type === 'mp4') url += `&quality=${q}`;
 
-  try {
-    // Try our own API — works once endpoint is fixed
-    const resp = await fetch(apiUrl, { signal: AbortSignal.timeout(8000) });
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  window.open(url, '_blank', 'noopener,noreferrer');
 
-    const ct = resp.headers.get('content-type') || '';
-    let fileUrl = resp.url;
-
-    if (ct.includes('application/json')) {
-      const data = await resp.json();
-      if (data.error) throw new Error(data.error);
-      fileUrl = data.url || data.downloadUrl || data.link || resp.url;
-    }
-
-    const a = document.createElement('a');
-    a.href = fileUrl;
-    a.download = `${videoId}.${type === 'mp3' ? 'mp3' : 'mp4'}`;
-    a.target = '_blank';
-    a.rel = 'noopener noreferrer';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-
-    if (btnEl) {
-      btnEl.innerHTML = '✓ Downloading!';
-      btnEl.classList.add('dl-success');
-      setTimeout(() => {
-        btnEl.innerHTML = origHTML;
-        btnEl.classList.remove('dl-success');
-        btnEl.disabled = false;
-        dlInProgress[key] = false;
-      }, 3000);
-    } else {
-      dlInProgress[key] = false;
-    }
-
-  } catch (err) {
-    // API not ready yet — show a helpful toast with a direct YouTube link
-    dlInProgress[key] = false;
-    if (btnEl) {
+  if (btnEl) {
+    btnEl.innerHTML = '✓ Downloading!';
+    btnEl.classList.add('dl-success');
+    setTimeout(() => {
       btnEl.innerHTML = origHTML;
+      btnEl.classList.remove('dl-success');
       btnEl.disabled = false;
-    }
-    showDownloadToast(videoId, type, q);
+      dlInProgress[key] = false;
+    }, 3000);
+  } else {
+    dlInProgress[key] = false;
   }
-}
-
-// Toast shown while the download API is being fixed
-function showDownloadToast(videoId, type, quality) {
-  // Remove any existing toast
-  document.getElementById('dl-toast')?.remove();
-
-  const ytUrl = `https://www.youtube.com/watch?v=${videoId}`;
-  const label = type === 'mp3' ? 'MP3 Audio' : `MP4 Video${quality ? ' ' + quality + 'p' : ''}`;
-
-  const toast = document.createElement('div');
-  toast.id = 'dl-toast';
-  toast.innerHTML = `
-    <div class="dl-toast-inner">
-      <div class="dl-toast-icon">⚠️</div>
-      <div class="dl-toast-body">
-        <div class="dl-toast-title">Download API coming soon</div>
-        <div class="dl-toast-msg">
-          The ${label} download endpoint is being fixed.<br>
-          For now, open on YouTube and use 
-          <strong>browser save / an extension</strong>.
-        </div>
-        <a class="dl-toast-link" href="${ytUrl}" target="_blank" rel="noopener">
-          ↗ Open on YouTube
-        </a>
-      </div>
-      <button class="dl-toast-close" onclick="document.getElementById('dl-toast').remove()">✕</button>
-    </div>`;
-  document.body.appendChild(toast);
-
-  // Auto-dismiss after 8s
-  setTimeout(() => toast.remove(), 8000);
 }
 
 // ── MODE TOGGLE ───────────────────────────────────────────────────────────────
