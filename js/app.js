@@ -79,13 +79,9 @@ function extractPlaylistId(input) {
   return m ? m[1] : null;
 }
 
-// ── DOWNLOAD — uses cobalt.tools public API (free, no key needed) ────────────
-// cobalt.tools is open source and actively maintained.
-// Docs: https://github.com/imputnet/cobalt
-const COBALT = 'https://api.cobalt.tools';
-
-// Quality map: our labels → cobalt videoQuality values
-const COBALT_QUALITY = { '360': '360', '480': '480', '720': '720', '1080': '1080' };
+// ── DOWNLOAD ─────────────────────────────────────────────────────────────────
+// Tries your own API first (ready for when it's fixed).
+// While the API is down, shows a download toast with a working direct link.
 
 async function triggerDownload(videoId, type, quality, btnEl) {
   const key = videoId + type + (quality || '');
@@ -98,38 +94,27 @@ async function triggerDownload(videoId, type, quality, btnEl) {
     btnEl.disabled = true;
   }
 
-  const ytUrl = `https://www.youtube.com/watch?v=${videoId}`;
+  const q = quality || (type === 'mp4' ? '720' : null);
+  let apiUrl = `${BASE}/download?url=${videoId}&type=${type}&redirect=1`;
+  if (q && type === 'mp4') apiUrl += `&quality=${q}`;
 
   try {
-    const body = {
-      url: ytUrl,
-      downloadMode: type === 'mp3' ? 'audio' : 'auto',
-      videoQuality: COBALT_QUALITY[quality] || '720',
-      audioFormat: type === 'mp3' ? 'mp3' : 'best',
-      filenameStyle: 'pretty',
-    };
+    // Try our own API — works once endpoint is fixed
+    const resp = await fetch(apiUrl, { signal: AbortSignal.timeout(8000) });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
 
-    const resp = await fetch(COBALT, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-      body: JSON.stringify(body),
-    });
+    const ct = resp.headers.get('content-type') || '';
+    let fileUrl = resp.url;
 
-    const data = await resp.json();
+    if (ct.includes('application/json')) {
+      const data = await resp.json();
+      if (data.error) throw new Error(data.error);
+      fileUrl = data.url || data.downloadUrl || data.link || resp.url;
+    }
 
-    // cobalt returns { status: 'stream'|'redirect'|'tunnel'|'picker', url, ... }
-    if (data.status === 'error') throw new Error(data.error?.code || 'cobalt error');
-
-    const fileUrl = data.url || (data.picker && data.picker[0]?.url);
-    if (!fileUrl) throw new Error('No URL returned');
-
-    // Trigger download via hidden anchor
     const a = document.createElement('a');
     a.href = fileUrl;
-    a.download = '';
+    a.download = `${videoId}.${type === 'mp3' ? 'mp3' : 'mp4'}`;
     a.target = '_blank';
     a.rel = 'noopener noreferrer';
     document.body.appendChild(a);
@@ -150,25 +135,46 @@ async function triggerDownload(videoId, type, quality, btnEl) {
     }
 
   } catch (err) {
-    console.warn('cobalt failed, falling back to y2mate redirect:', err);
-
-    // Fallback: open y2mate with the video pre-filled — user clicks one button
-    const fallback = `https://www.y2mate.com/youtube/${videoId}`;
-    window.open(fallback, '_blank', 'noopener,noreferrer');
-
+    // API not ready yet — show a helpful toast with a direct YouTube link
+    dlInProgress[key] = false;
     if (btnEl) {
-      btnEl.innerHTML = '↗ Opened';
-      btnEl.classList.add('dl-success');
-      setTimeout(() => {
-        btnEl.innerHTML = origHTML;
-        btnEl.classList.remove('dl-success');
-        btnEl.disabled = false;
-        dlInProgress[key] = false;
-      }, 3000);
-    } else {
-      dlInProgress[key] = false;
+      btnEl.innerHTML = origHTML;
+      btnEl.disabled = false;
     }
+    showDownloadToast(videoId, type, q);
   }
+}
+
+// Toast shown while the download API is being fixed
+function showDownloadToast(videoId, type, quality) {
+  // Remove any existing toast
+  document.getElementById('dl-toast')?.remove();
+
+  const ytUrl = `https://www.youtube.com/watch?v=${videoId}`;
+  const label = type === 'mp3' ? 'MP3 Audio' : `MP4 Video${quality ? ' ' + quality + 'p' : ''}`;
+
+  const toast = document.createElement('div');
+  toast.id = 'dl-toast';
+  toast.innerHTML = `
+    <div class="dl-toast-inner">
+      <div class="dl-toast-icon">⚠️</div>
+      <div class="dl-toast-body">
+        <div class="dl-toast-title">Download API coming soon</div>
+        <div class="dl-toast-msg">
+          The ${label} download endpoint is being fixed.<br>
+          For now, open on YouTube and use 
+          <strong>browser save / an extension</strong>.
+        </div>
+        <a class="dl-toast-link" href="${ytUrl}" target="_blank" rel="noopener">
+          ↗ Open on YouTube
+        </a>
+      </div>
+      <button class="dl-toast-close" onclick="document.getElementById('dl-toast').remove()">✕</button>
+    </div>`;
+  document.body.appendChild(toast);
+
+  // Auto-dismiss after 8s
+  setTimeout(() => toast.remove(), 8000);
 }
 
 // ── MODE TOGGLE ───────────────────────────────────────────────────────────────
