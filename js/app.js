@@ -80,37 +80,78 @@ function extractPlaylistId(input) {
 }
 
 // ── DOWNLOAD ─────────────────────────────────────────────────────────────────
-// API uses redirect=1 — server does a 302 straight to the media file.
-// window.open() lets the browser follow the redirect and save the file natively.
+// Uses fetch() to stream the file as a blob and triggers a silent browser
+// download — no new tab opened, works on desktop, Android, and iOS.
+// The API endpoint: /download?url=VIDEO_ID&type=mp3|mp4&redirect=1[&quality=720]
 
-function triggerDownload(videoId, type, quality, btnEl) {
+async function triggerDownload(videoId, type, quality, btnEl) {
   const key = videoId + type + (quality || '');
   if (dlInProgress[key]) return;
   dlInProgress[key] = true;
 
   const origHTML = btnEl ? btnEl.innerHTML : '';
   if (btnEl) {
-    btnEl.innerHTML = `<span class="dl-spinner"></span> Starting…`;
+    btnEl.innerHTML = `<span class="dl-spinner"></span> Downloading…`;
     btnEl.disabled = true;
   }
 
-  const q = quality || (type === 'mp4' ? '720' : null);
-  let url = `${BASE}/download?url=${videoId}&type=${type}&redirect=1`;
-  if (q && type === 'mp4') url += `&quality=${q}`;
+  const q   = quality || (type === 'mp4' ? '720' : null);
+  const ext = type === 'mp3' ? 'mp3' : 'mp4';
+  let endpoint = `${BASE}/download?url=${videoId}&type=${type}&redirect=1`;
+  if (q && type === 'mp4') endpoint += `&quality=${q}`;
 
-  window.open(url, '_blank', 'noopener,noreferrer');
+  try {
+    const resp = await fetch(endpoint);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
 
-  if (btnEl) {
-    btnEl.innerHTML = '✓ Downloading!';
-    btnEl.classList.add('dl-success');
-    setTimeout(() => {
-      btnEl.innerHTML = origHTML;
-      btnEl.classList.remove('dl-success');
-      btnEl.disabled = false;
+    // Get filename from Content-Disposition header if available
+    const disposition = resp.headers.get('content-disposition') || '';
+    let filename = `${videoId}.${ext}`;
+    const fnMatch = disposition.match(/filename[^;=\n]*=(['"]?)([^'";\n]+)\1/);
+    if (fnMatch) filename = fnMatch[2].trim();
+
+    // Stream response into a blob then trigger download silently
+    const blob = await resp.blob();
+    const blobUrl = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = filename;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    // Revoke the blob URL after a short delay to free memory
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+
+    if (btnEl) {
+      btnEl.innerHTML = '✓ Done!';
+      btnEl.classList.add('dl-success');
+      setTimeout(() => {
+        btnEl.innerHTML = origHTML;
+        btnEl.classList.remove('dl-success');
+        btnEl.disabled = false;
+        dlInProgress[key] = false;
+      }, 3000);
+    } else {
       dlInProgress[key] = false;
-    }, 3000);
-  } else {
-    dlInProgress[key] = false;
+    }
+
+  } catch (err) {
+    console.error('Download error:', err);
+    if (btnEl) {
+      btnEl.innerHTML = '✗ Failed';
+      btnEl.classList.add('dl-fail');
+      setTimeout(() => {
+        btnEl.innerHTML = origHTML;
+        btnEl.classList.remove('dl-fail');
+        btnEl.disabled = false;
+        dlInProgress[key] = false;
+      }, 3000);
+    } else {
+      dlInProgress[key] = false;
+    }
   }
 }
 
@@ -130,21 +171,14 @@ function handleSearch(e) {
   const raw = document.getElementById('search-input').value.trim();
   if (!raw) return;
 
-  // Is it a YouTube playlist URL?
   const plId = extractPlaylistId(raw);
-  if (plId) {
-    openPlaylist(plId, 'YouTube Playlist');
-    return;
-  }
+  if (plId) { openPlaylist(plId, 'YouTube Playlist'); return; }
 
-  // Is it a YouTube video URL?
   const vidId = extractVideoId(raw);
   if (vidId && (raw.includes('youtu.be') || raw.includes('youtube.com'))) {
-    loadVideoById(vidId);
-    return;
+    loadVideoById(vidId); return;
   }
 
-  // Regular text search
   doSearch(raw, true);
 }
 
@@ -171,7 +205,6 @@ async function loadVideoById(videoId) {
       </div>
       <div class="grid single-card">${videoCardHTML(item)}</div>`;
   } catch (err) {
-    // Fallback card using YT thumbnail
     const item = {
       videoId,
       title:        'YouTube Video',
@@ -346,8 +379,7 @@ function playlistCardHTML(pl) {
 function openPlayer(id, type) {
   const modal = document.getElementById('player-modal');
   if (modalVideoId === id && modalType === type && modal.classList.contains('open')) {
-    closePlayerModal();
-    return;
+    closePlayerModal(); return;
   }
 
   modalVideoId  = id;
@@ -369,13 +401,11 @@ function openPlayer(id, type) {
   badge.textContent = isAudio ? '🎵 Audio' : '🎬 Video';
   badge.className   = 'pm-type-badge ' + (isAudio ? 'green' : 'purple');
 
-  // Reset expand
   const expBtn = document.getElementById('pm-expand-btn');
   expBtn.textContent = '⛶';
   expBtn.title = 'Maximize';
   modal.classList.remove('expanded');
 
-  // Render download buttons in the modal footer
   renderModalDownloadBtns(id);
 
   const thumbWrap = document.getElementById('pm-thumb-wrap');
@@ -395,7 +425,6 @@ function openPlayer(id, type) {
   }
 
   iframe.src = `https://www.youtube.com/embed/${id}?autoplay=1&rel=0`;
-
   modal.classList.add('open');
 
   updateAllCardStates(id, type);
