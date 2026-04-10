@@ -80,78 +80,43 @@ function extractPlaylistId(input) {
 }
 
 // ── DOWNLOAD ─────────────────────────────────────────────────────────────────
-// Uses fetch() to stream the file as a blob and triggers a silent browser
-// download — no new tab opened, works on desktop, Android, and iOS.
-// The API endpoint: /download?url=VIDEO_ID&type=mp3|mp4&redirect=1[&quality=720]
+// Direct <a href download> — browser follows the 302 redirect to the file
+// immediately. No blob buffering, no new tab, instant start on all devices.
 
-async function triggerDownload(videoId, type, quality, btnEl) {
+function triggerDownload(videoId, type, quality, btnEl) {
   const key = videoId + type + (quality || '');
   if (dlInProgress[key]) return;
   dlInProgress[key] = true;
 
   const origHTML = btnEl ? btnEl.innerHTML : '';
   if (btnEl) {
-    btnEl.innerHTML = `<span class="dl-spinner"></span> Downloading…`;
+    btnEl.innerHTML = '⬇ Starting…';
     btnEl.disabled = true;
   }
 
-  const q   = quality || (type === 'mp4' ? '720' : null);
-  const ext = type === 'mp3' ? 'mp3' : 'mp4';
-  let endpoint = `${BASE}/download?url=${videoId}&type=${type}&redirect=1`;
-  if (q && type === 'mp4') endpoint += `&quality=${q}`;
+  const q = quality || (type === 'mp4' ? '720' : null);
+  let url = `${BASE}/download?url=${videoId}&type=${type}&redirect=1`;
+  if (q && type === 'mp4') url += `&quality=${q}`;
 
-  try {
-    const resp = await fetch(endpoint);
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = '';
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
 
-    // Get filename from Content-Disposition header if available
-    const disposition = resp.headers.get('content-disposition') || '';
-    let filename = `${videoId}.${ext}`;
-    const fnMatch = disposition.match(/filename[^;=\n]*=(['"]?)([^'";\n]+)\1/);
-    if (fnMatch) filename = fnMatch[2].trim();
-
-    // Stream response into a blob then trigger download silently
-    const blob = await resp.blob();
-    const blobUrl = URL.createObjectURL(blob);
-
-    const a = document.createElement('a');
-    a.href = blobUrl;
-    a.download = filename;
-    a.style.display = 'none';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-
-    // Revoke the blob URL after a short delay to free memory
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
-
-    if (btnEl) {
-      btnEl.innerHTML = '✓ Done!';
-      btnEl.classList.add('dl-success');
-      setTimeout(() => {
-        btnEl.innerHTML = origHTML;
-        btnEl.classList.remove('dl-success');
-        btnEl.disabled = false;
-        dlInProgress[key] = false;
-      }, 3000);
-    } else {
+  if (btnEl) {
+    btnEl.innerHTML = '✓ Started!';
+    btnEl.classList.add('dl-success');
+    setTimeout(() => {
+      btnEl.innerHTML = origHTML;
+      btnEl.classList.remove('dl-success');
+      btnEl.disabled = false;
       dlInProgress[key] = false;
-    }
-
-  } catch (err) {
-    console.error('Download error:', err);
-    if (btnEl) {
-      btnEl.innerHTML = '✗ Failed';
-      btnEl.classList.add('dl-fail');
-      setTimeout(() => {
-        btnEl.innerHTML = origHTML;
-        btnEl.classList.remove('dl-fail');
-        btnEl.disabled = false;
-        dlInProgress[key] = false;
-      }, 3000);
-    } else {
-      dlInProgress[key] = false;
-    }
+    }, 3000);
+  } else {
+    dlInProgress[key] = false;
   }
 }
 
