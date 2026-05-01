@@ -1,5 +1,5 @@
 // ── CONFIG ───────────────────────────────────────────────────────────────────
-const BASE = 'https://ytapiv4.techobed4.workers.dev/api';
+const BASE = 'https://ytdlapi-obedtech.zone.id/api';
 
 const TRENDING_QUERIES = [
   'trending music 2026',
