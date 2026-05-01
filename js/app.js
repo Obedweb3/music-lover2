@@ -31,6 +31,10 @@ let modalTitle    = '';
 let modalChannel  = '';
 let modalThumb    = '';
 
+// Cache for video metadata (title/channel/thumb) keyed by videoId
+// FIX: Prevents crash when openPlayer is called and the card isn't in the DOM
+const videoCache = {};
+
 // ── HELPERS ──────────────────────────────────────────────────────────────────
 function dec(html) {
   const t = document.createElement('textarea');
@@ -47,22 +51,36 @@ function esc(str) {
     .replace(/>/g, '&gt;');
 }
 
-function escAttr(str) {
-  return String(str)
-    .replace(/\\/g, '\\\\')
-    .replace(/'/g, "\\'")
-    .replace(/"/g, '&quot;')
-    .replace(/\n/g, ' ')
-    .replace(/\r/g, '');
+// FIX: Use event listeners on Load More buttons instead of inline onclick with
+// string interpolation — apostrophes in song titles were breaking inline JS.
+function setLoadMoreBtn(section, query, isPlaylist) {
+  const old = section.querySelector('.load-more-wrap');
+  if (old) old.remove();
+  const wrap = document.createElement('div');
+  wrap.className = 'load-more-wrap';
+  const btn = document.createElement('button');
+  btn.className = 'load-more-btn' + (isPlaylist ? ' purple' : '');
+  btn.textContent = 'Load More';
+  btn.addEventListener('click', () => doSearch(query, false));
+  wrap.appendChild(btn);
+  section.appendChild(wrap);
 }
 
 async function apiFetch(url) {
-  const r = await fetch(url);
-  if (!r.ok) throw new Error('API error');
-  return r.json();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 12000);
+  try {
+    const r = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeout);
+    if (!r.ok) throw new Error(`API error ${r.status}`);
+    return r.json();
+  } catch (err) {
+    clearTimeout(timeout);
+    if (err.name === 'AbortError') throw new Error('Request timed out. Please try again.');
+    throw err;
+  }
 }
 
-// Extract YouTube video ID from any YT URL
 function extractVideoId(input) {
   input = input.trim();
   if (/^[A-Za-z0-9_-]{11}$/.test(input)) return input;
@@ -73,16 +91,14 @@ function extractVideoId(input) {
   return null;
 }
 
-// Extract YouTube playlist ID from URL
 function extractPlaylistId(input) {
   const m = input.trim().match(/[?&]list=([A-Za-z0-9_-]+)/);
   return m ? m[1] : null;
 }
 
 // ── DOWNLOAD ─────────────────────────────────────────────────────────────────
-// Direct <a href download> — browser follows the 302 redirect to the file
-// immediately. No blob buffering, no new tab, instant start on all devices.
-
+// FIX: Was passing bare videoId (e.g. "abc1234567") as the url param.
+// The API expects a full YouTube watch URL: https://www.youtube.com/watch?v=...
 function triggerDownload(videoId, type, quality, btnEl) {
   const key = videoId + type + (quality || '');
   if (dlInProgress[key]) return;
@@ -90,12 +106,13 @@ function triggerDownload(videoId, type, quality, btnEl) {
 
   const origHTML = btnEl ? btnEl.innerHTML : '';
   if (btnEl) {
-    btnEl.innerHTML = '⬇ Starting…';
+    btnEl.innerHTML = '<span class="dl-spinner"></span> Starting…';
     btnEl.disabled = true;
   }
 
   const q = quality || (type === 'mp4' ? '720' : null);
-  let url = `${BASE}/download?url=${videoId}&type=${type}&redirect=1`;
+  const ytUrl = `https://www.youtube.com/watch?v=${videoId}`;
+  let url = `${BASE}/download?url=${encodeURIComponent(ytUrl)}&type=${type}&redirect=1`;
   if (q && type === 'mp4') url += `&quality=${q}`;
 
   const a = document.createElement('a');
@@ -107,14 +124,16 @@ function triggerDownload(videoId, type, quality, btnEl) {
   document.body.removeChild(a);
 
   if (btnEl) {
-    btnEl.innerHTML = '✓ Started!';
-    btnEl.classList.add('dl-success');
     setTimeout(() => {
-      btnEl.innerHTML = origHTML;
-      btnEl.classList.remove('dl-success');
-      btnEl.disabled = false;
-      dlInProgress[key] = false;
-    }, 3000);
+      btnEl.innerHTML = '✓ Started!';
+      btnEl.classList.add('dl-success');
+      setTimeout(() => {
+        btnEl.innerHTML = origHTML;
+        btnEl.classList.remove('dl-success');
+        btnEl.disabled = false;
+        dlInProgress[key] = false;
+      }, 2500);
+    }, 800);
   } else {
     dlInProgress[key] = false;
   }
@@ -147,7 +166,17 @@ function handleSearch(e) {
   doSearch(raw, true);
 }
 
-// Load a single video by ID from a pasted link
+// FIX: Disable search button during requests to prevent double-submit
+function setSearchLoading(loading) {
+  const btn = document.querySelector('.search-btn');
+  const input = document.getElementById('search-input');
+  if (btn) {
+    btn.disabled = loading;
+    btn.textContent = loading ? 'Searching…' : 'Search';
+  }
+  if (input) input.disabled = loading;
+}
+
 async function loadVideoById(videoId) {
   showTrending(false);
   showEmptyState(false);
@@ -164,6 +193,7 @@ async function loadVideoById(videoId) {
       thumbnail:    data.thumbnail || `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
       channelTitle: data.channel || data.author || '',
     };
+    videoCache[item.videoId] = item;
     sec.innerHTML = `
       <div class="section-head">
         <div class="section-icon">🔗</div><h3>Video from Link</h3>
@@ -176,6 +206,7 @@ async function loadVideoById(videoId) {
       thumbnail:    `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
       channelTitle: '',
     };
+    videoCache[videoId] = item;
     sec.innerHTML = `
       <div class="section-head">
         <div class="section-icon">🔗</div><h3>Video from Link</h3>
@@ -194,6 +225,7 @@ async function doSearch(q, reset) {
 
   const sec = document.getElementById('results-section');
   if (reset) {
+    setSearchLoading(true);
     sec.innerHTML = `<div class="center-msg">
       <div class="spinner${mode === 'playlist' ? ' purple' : ''}"></div>
       <p>Searching...</p></div>`;
@@ -203,7 +235,20 @@ async function doSearch(q, reset) {
     if (mode === 'video') await loadVideos(q, reset);
     else await loadPlaylists(q, reset);
   } catch (err) {
-    sec.innerHTML = `<div class="center-msg" style="color:#e05252">Something went wrong. Please try again.</div>`;
+    const msg = err.message || 'Something went wrong.';
+    sec.innerHTML = `<div class="center-msg">
+      <div style="font-size:32px;margin-bottom:10px">⚠️</div>
+      <p style="color:#e05252;margin-bottom:12px">${esc(msg)}</p>
+    </div>`;
+    // Add retry button using event listener, not inline onclick
+    const retryBtn = document.createElement('button');
+    retryBtn.className = 'load-more-btn';
+    retryBtn.textContent = 'Try Again';
+    retryBtn.style.marginTop = '8px';
+    retryBtn.addEventListener('click', () => doSearch(q, true));
+    sec.querySelector('.center-msg').appendChild(retryBtn);
+  } finally {
+    setSearchLoading(false);
   }
 }
 
@@ -219,11 +264,16 @@ async function loadVideos(q, reset) {
   }));
   videoNextToken = data.nextPageToken ?? null;
 
+  items.forEach(v => { videoCache[v.videoId] = v; });
+
   const sec = document.getElementById('results-section');
   if (reset) sec.innerHTML = '';
 
   if (reset && items.length === 0) {
-    sec.innerHTML = `<p class="center-msg">No results found for "${esc(q)}"</p>`;
+    sec.innerHTML = `<div class="center-msg">
+      <div style="font-size:40px;margin-bottom:10px;opacity:0.3">🔍</div>
+      <p>No results found for <strong>${esc(q)}</strong></p>
+    </div>`;
     return;
   }
 
@@ -238,13 +288,11 @@ async function loadVideos(q, reset) {
 
   items.forEach(v => grid.insertAdjacentHTML('beforeend', videoCardHTML(v)));
 
-  const old = sec.querySelector('.load-more-wrap');
-  if (old) old.remove();
   if (videoNextToken) {
-    sec.insertAdjacentHTML('beforeend', `
-      <div class="load-more-wrap">
-        <button class="load-more-btn" onclick="doSearch('${escAttr(q)}',false)">Load More</button>
-      </div>`);
+    setLoadMoreBtn(sec, q, false);
+  } else {
+    const old = sec.querySelector('.load-more-wrap');
+    if (old) old.remove();
   }
 }
 
@@ -264,7 +312,10 @@ async function loadPlaylists(q, reset) {
   if (reset) sec.innerHTML = '';
 
   if (reset && items.length === 0) {
-    sec.innerHTML = `<p class="center-msg">No playlists found for "${esc(q)}"</p>`;
+    sec.innerHTML = `<div class="center-msg">
+      <div style="font-size:40px;margin-bottom:10px;opacity:0.3">📋</div>
+      <p>No playlists found for <strong>${esc(q)}</strong></p>
+    </div>`;
     return;
   }
 
@@ -279,13 +330,11 @@ async function loadPlaylists(q, reset) {
 
   items.forEach(pl => grid.insertAdjacentHTML('beforeend', playlistCardHTML(pl)));
 
-  const old = sec.querySelector('.load-more-wrap');
-  if (old) old.remove();
   if (playlistNextToken) {
-    sec.insertAdjacentHTML('beforeend', `
-      <div class="load-more-wrap">
-        <button class="load-more-btn purple" onclick="doSearch('${escAttr(q)}',false)">Load More</button>
-      </div>`);
+    setLoadMoreBtn(sec, q, true);
+  } else {
+    const old = sec.querySelector('.load-more-wrap');
+    if (old) old.remove();
   }
 }
 
@@ -325,9 +374,14 @@ function videoCardHTML(v) {
 }
 
 // ── PLAYLIST CARD HTML ────────────────────────────────────────────────────────
+// FIX: Use data-attributes instead of inline onclick string interpolation
+// so playlist titles with apostrophes/quotes don't break JS
 function playlistCardHTML(pl) {
   return `
-    <div class="card playlist-card" onclick="openPlaylist('${escAttr(pl.playlistId)}','${escAttr(pl.title)}')">
+    <div class="card playlist-card"
+         data-playlist-id="${esc(pl.playlistId)}"
+         data-playlist-title="${esc(pl.title)}"
+         onclick="openPlaylistFromCard(this)">
       <div class="thumb-wrap">
         <img src="${esc(pl.thumbnail)}" alt="${esc(pl.title)}" loading="lazy" />
         <div class="thumb-overlay"><div class="play-circle purple">📋</div></div>
@@ -338,6 +392,10 @@ function playlistCardHTML(pl) {
         <div class="card-channel">${esc(pl.channelTitle)}</div>
       </div>
     </div>`;
+}
+
+function openPlaylistFromCard(el) {
+  openPlaylist(el.dataset.playlistId, el.dataset.playlistTitle);
 }
 
 // ── PLAYER MODAL ─────────────────────────────────────────────────────────────
@@ -351,10 +409,20 @@ function openPlayer(id, type) {
   modalType     = type;
   modalExpanded = false;
 
+  // FIX: Fall back to videoCache when card isn't present in the DOM.
+  // Previously this crashed silently, leaving the modal with empty/stale data.
   const card   = document.getElementById(`card-${id}`);
-  modalTitle   = card?.querySelector('.card-title')?.textContent   || 'YouTube Video';
-  modalChannel = card?.querySelector('.card-channel')?.textContent || '';
-  modalThumb   = card?.querySelector('img')?.src || `https://img.youtube.com/vi/${id}/hqdefault.jpg`;
+  const cached = videoCache[id];
+
+  modalTitle   = card?.querySelector('.card-title')?.textContent
+               || cached?.title
+               || 'YouTube Video';
+  modalChannel = card?.querySelector('.card-channel')?.textContent
+               || cached?.channelTitle
+               || '';
+  modalThumb   = card?.querySelector('img')?.src
+               || cached?.thumbnail
+               || `https://img.youtube.com/vi/${id}/hqdefault.jpg`;
 
   const isAudio = type === 'mp3';
 
@@ -445,6 +513,8 @@ function closePlayerModal() {
 
   if (modalVideoId) updateAllCardStates(modalVideoId, null);
 
+  // FIX: Resume audio in NPB when modal is closed (not stopped).
+  // currentNpbId is preserved until user clicks ✕ stop — so NPB reopen still works.
   if (currentNpbId) {
     document.getElementById('npb-iframe').src =
       `https://www.youtube.com/embed/${currentNpbId}?autoplay=1&rel=0`;
@@ -524,6 +594,15 @@ function toggleQuality(id, e) {
   document.querySelectorAll('.quality-menu.open').forEach(m => {
     if (m !== menu) m.classList.remove('open');
   });
+
+  // FIX: On mobile, quality dropdown can clip off-screen at the top.
+  // Check available space and open downward if there isn't enough room above.
+  if (!menu.classList.contains('open')) {
+    const btnRect = e.currentTarget.getBoundingClientRect();
+    const spaceAbove = btnRect.top;
+    menu.classList.toggle('open-down', spaceAbove < 180);
+  }
+
   menu.classList.toggle('open');
 }
 
@@ -573,14 +652,18 @@ function stopPlayer() {
   document.body.classList.remove('pb-bar');
 
   if (currentNpbId) updateAllCardStates(currentNpbId, null);
+
+  // Only clear all state when user explicitly hits stop
   currentNpbId = null;
   modalVideoId = null;
   modalType    = null;
 }
 
+// FIX: NPB reopen was referencing modalVideoId which gets set to null
+// elsewhere. Use currentNpbId as the reliable persistent reference instead.
 document.getElementById('npb-reopen').addEventListener('click', () => {
-  const id   = modalVideoId ?? currentNpbId;
-  const type = modalType    ?? 'mp4';
+  const id   = currentNpbId || modalVideoId;
+  const type = modalType ?? 'mp4';
   if (id) openPlayer(id, type);
 });
 
@@ -589,7 +672,7 @@ async function openPlaylist(id, title) {
   document.getElementById('playlist-viewer').classList.add('visible');
   document.getElementById('results-section').style.display = 'none';
   document.getElementById('trending-section').style.display = 'none';
-  document.getElementById('playlist-title').textContent = title;
+  document.getElementById('playlist-title').textContent = dec(title);
   document.getElementById('playlist-count').textContent = '';
 
   const grid = document.getElementById('playlist-grid');
@@ -603,10 +686,24 @@ async function openPlaylist(id, title) {
       videoId: r.videoId, title: dec(r.title),
       thumbnail: r.thumbnail, channelTitle: r.channel ?? '', publishedAt: '',
     }));
+    items.forEach(v => { videoCache[v.videoId] = v; });
     document.getElementById('playlist-count').textContent = `(${items.length} tracks)`;
-    grid.innerHTML = items.map(v => videoCardHTML(v)).join('');
+    if (items.length === 0) {
+      grid.innerHTML = `<div class="center-msg" style="grid-column:1/-1">This playlist appears to be empty.</div>`;
+    } else {
+      grid.innerHTML = items.map(v => videoCardHTML(v)).join('');
+    }
   } catch (e) {
-    grid.innerHTML = `<div class="center-msg" style="grid-column:1/-1;color:#e05252">Failed to load playlist.</div>`;
+    grid.innerHTML = `<div class="center-msg" style="grid-column:1/-1">
+      <div style="font-size:32px;margin-bottom:10px">⚠️</div>
+      <p style="color:#e05252;margin-bottom:10px">Failed to load playlist.</p>
+    </div>`;
+    // Add retry button with event listener
+    const retryBtn = document.createElement('button');
+    retryBtn.className = 'load-more-btn purple';
+    retryBtn.textContent = 'Try Again';
+    retryBtn.addEventListener('click', () => openPlaylist(id, title));
+    grid.querySelector('.center-msg').appendChild(retryBtn);
   }
 }
 
@@ -624,7 +721,8 @@ function showEmptyState(show) {
   document.getElementById('empty-state').style.display = show ? '' : 'none';
 }
 
-async function loadTrending() {
+// FIX: Added auto-retry (once) and a manual Retry button on persistent failure.
+async function loadTrending(retryCount = 0) {
   const q = TRENDING_QUERIES[Math.floor(Math.random() * TRENDING_QUERIES.length)];
   try {
     const params = new URLSearchParams({ q, type: 'video', maxResults: '8' });
@@ -633,6 +731,7 @@ async function loadTrending() {
       videoId: r.videoId, title: dec(r.title),
       thumbnail: r.thumbnail, channelTitle: r.channel ?? '', publishedAt: '',
     }));
+    items.forEach(v => { videoCache[v.videoId] = v; });
     document.getElementById('trending-loading').style.display = 'none';
     const grid = document.getElementById('trending-grid');
     if (items.length) {
@@ -640,8 +739,23 @@ async function loadTrending() {
       grid.innerHTML = items.map(v => videoCardHTML(v)).join('');
     }
   } catch (e) {
-    document.getElementById('trending-loading').innerHTML =
-      '<p style="color:var(--muted)">Could not load trending music.</p>';
+    if (retryCount < 1) {
+      // Silent auto-retry after 2 seconds
+      setTimeout(() => loadTrending(retryCount + 1), 2000);
+    } else {
+      const loadingEl = document.getElementById('trending-loading');
+      loadingEl.innerHTML = '<p style="color:var(--muted);font-size:13px;margin-bottom:10px">Could not load trending music.</p>';
+      const retryBtn = document.createElement('button');
+      retryBtn.className = 'load-more-btn';
+      retryBtn.textContent = 'Retry';
+      retryBtn.style.cssText = 'font-size:12px;padding:8px 20px';
+      retryBtn.addEventListener('click', () => {
+        loadingEl.innerHTML = '<div class="spinner"></div><p>Loading trending music…</p>';
+        document.getElementById('trending-grid').style.display = 'none';
+        loadTrending(0);
+      });
+      loadingEl.appendChild(retryBtn);
+    }
   }
 }
 
