@@ -67,6 +67,36 @@ header {
   color: var(--green); font-size: 12px; font-weight: 600;
   margin-bottom: 22px;
 }
+
+/* ── API STATUS ── */
+.api-status {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px; border-radius: 999px;
+  background: rgba(90, 106, 128, 0.1);
+  border: 1px solid rgba(90, 106, 128, 0.2);
+  font-size: 11px; font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 16px;
+}
+.status-dot {
+  display: inline-block;
+  width: 6px; height: 6px; border-radius: 50%;
+  background: rgba(224, 82, 82, 0.6);
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+.status-dot.online {
+  background: var(--green);
+  animation: none;
+}
+.status-dot.offline {
+  background: rgba(224, 82, 82, 0.6);
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
 .hero h2 { font-size: clamp(28px, 5vw, 52px); font-weight: 800; line-height: 1.1; margin-bottom: 14px; }
 .hero h2 span {
   background: linear-gradient(135deg, var(--green), var(--green2));
@@ -233,7 +263,6 @@ header {
   max-width: 1100px;
   max-height: 96vh;
 }
-/* FIX: Show pointer cursor on modal backdrop so users know it's clickable to close */
 #player-modal { cursor: pointer; }
 #player-modal .pm-box { cursor: default; }
 
@@ -340,8 +369,6 @@ header {
 }
 
 /* ── NOW PLAYING BAR ── */
-/* FIX: display:none was preventing the translateY transition from animating.
-   Use visibility + pointer-events instead so the slide-up effect actually plays. */
 #now-playing-bar {
   position: fixed; bottom: 0; left: 0; right: 0; z-index: 200;
   border-top: 1px solid var(--border);
@@ -421,7 +448,6 @@ header {
 
 /* ── SECTIONS ── */
 .section { padding-bottom: 48px; }
-/* FIX: Add top padding to main so first section isn't clipped by the sticky 64px header */
 main.container { padding-top: 32px; }
 .pb-bar { padding-bottom: 88px; }
 
@@ -463,7 +489,6 @@ footer span {
 .grid.single-card { grid-template-columns: minmax(240px, 360px); }
 
 /* ── PLAYER MODAL — COMPACT BY DEFAULT ── */
-/* Override the old full-page styles */
 #player-modal {
   padding: 20px;
   align-items: center;
@@ -567,14 +592,3 @@ footer span {
 .btn.dl-success, .pm-dl-btn.dl-success { background: var(--green) !important; color: #080c12 !important; border-color: transparent !important; }
 .btn.dl-fail    { color: #e05252 !important; border-color: rgba(224,82,82,0.4) !important; }
 .btn:disabled, .pm-dl-btn:disabled { opacity: 0.6; cursor: not-allowed; }
-
-/* ── DOWNLOAD SPINNER ── */
-.dl-spinner {
-  display: inline-block;
-  width: 10px; height: 10px; border-radius: 50%;
-  border: 2px solid rgba(255,255,255,0.25);
-  border-top-color: currentColor;
-  animation: spin 0.6s linear infinite;
-  vertical-align: middle;
-  flex-shrink: 0;
-}
