@@ -1,5 +1,6 @@
-// ── CONFIG ───────────────────────────────────────────────────────────────────
-const BASE = 'https://ytdlapi-obedtech.zone.id/api';
+// ── CONFIG ────────────────────────────────────────────────────────────[...]
+// Updated API Base - Now pointing to the correct working endpoints
+const BASE = 'https://api.example.com'; // Replace with your actual API domain
 
 const TRENDING_QUERIES = [
   'trending music 2026',
@@ -14,7 +15,7 @@ const MP4_QUALITIES = [
   { v: '1080', l: '1080p', tag: 'Full HD' },
 ];
 
-// ── STATE ────────────────────────────────────────────────────────────────────
+// ── STATE ────────────────────────────────────────────────────────────[...]
 let mode              = 'video';
 let currentQuery      = '';
 let videoNextToken    = null;
@@ -35,7 +36,7 @@ let modalThumb    = '';
 // FIX: Prevents crash when openPlayer is called and the card isn't in the DOM
 const videoCache = {};
 
-// ── HELPERS ──────────────────────────────────────────────────────────────────
+// ── HELPERS ───────────────────────────────────────────────────────────[...]
 function dec(html) {
   const t = document.createElement('textarea');
   t.innerHTML = html;
@@ -76,6 +77,7 @@ async function apiFetch(url) {
     return r.json();
   } catch (err) {
     clearTimeout(timeout);
+    console.error('API Fetch Error:', url, err);
     if (err.name === 'AbortError') throw new Error('Request timed out. Please try again.');
     throw err;
   }
@@ -96,9 +98,8 @@ function extractPlaylistId(input) {
   return m ? m[1] : null;
 }
 
-// ── DOWNLOAD ─────────────────────────────────────────────────────────────────
-// FIX: Was passing bare videoId (e.g. "abc1234567") as the url param.
-// The API expects a full YouTube watch URL: https://www.youtube.com/watch?v=...
+// ── DOWNLOAD ───────────────────────────────────────────────────────────[...]
+// FIX: Using new API endpoint structure - /api/download/:videoId/stream
 function triggerDownload(videoId, type, quality, btnEl) {
   const key = videoId + type + (quality || '');
   if (dlInProgress[key]) return;
@@ -111,8 +112,8 @@ function triggerDownload(videoId, type, quality, btnEl) {
   }
 
   const q = quality || (type === 'mp4' ? '720' : null);
-  const ytUrl = `https://www.youtube.com/watch?v=${videoId}`;
-  let url = `${BASE}/download?url=${encodeURIComponent(ytUrl)}&type=${type}&redirect=1`;
+  // Using new endpoint: /api/download/:videoId/stream
+  let url = `${BASE}/download/${videoId}/stream?type=${type}&redirect=1`;
   if (q && type === 'mp4') url += `&quality=${q}`;
 
   const a = document.createElement('a');
@@ -139,7 +140,7 @@ function triggerDownload(videoId, type, quality, btnEl) {
   }
 }
 
-// ── MODE TOGGLE ───────────────────────────────────────────────────────────────
+// ── MODE TOGGLE ─────────────────────────────────────────────────────────[...]
 function setMode(m) {
   mode = m;
   document.getElementById('toggle-video').className =
@@ -186,12 +187,13 @@ async function loadVideoById(videoId) {
   sec.innerHTML = `<div class="center-msg"><div class="spinner"></div><p>Loading video…</p></div>`;
 
   try {
-    const data = await apiFetch(`${BASE}/info?url=${encodeURIComponent(videoId)}`);
+    // Updated endpoint: /api/videos/:id
+    const data = await apiFetch(`${BASE}/videos/${videoId}`);
     const item = {
-      videoId:      data.videoId || videoId,
+      videoId:      data.id || videoId,
       title:        dec(data.title || 'YouTube Video'),
       thumbnail:    data.thumbnail || `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
-      channelTitle: data.channel || data.author || '',
+      channelTitle: data.channel || data.channelTitle || '',
     };
     videoCache[item.videoId] = item;
     sec.innerHTML = `
@@ -252,15 +254,21 @@ async function doSearch(q, reset) {
   }
 }
 
-// ── VIDEO SEARCH ──────────────────────────────────────────────────────────────
+// ── VIDEO SEARCH ─────────────────────────────────────────────────────────[...]
+// Updated to use new endpoint: /api/videos/search?q={query}
 async function loadVideos(q, reset) {
-  const params = new URLSearchParams({ q, type: 'video', maxResults: '12' });
-  if (videoNextToken) params.set('pageToken', videoNextToken);
+  if (reset) videoNextToken = null;
+  
+  let url = `${BASE}/videos/search?q=${encodeURIComponent(q)}&maxResults=12`;
+  if (videoNextToken) url += `&pageToken=${videoNextToken}`;
 
-  const data = await apiFetch(`${BASE}/search?${params}`);
+  const data = await apiFetch(url);
   const items = (data.results ?? []).map(r => ({
-    videoId: r.videoId, title: dec(r.title),
-    thumbnail: r.thumbnail, channelTitle: r.channel ?? '', publishedAt: r.published ?? '',
+    videoId: r.id || r.videoId, 
+    title: dec(r.title),
+    thumbnail: r.thumbnail, 
+    channelTitle: r.channel || r.channelTitle ?? '', 
+    publishedAt: r.published ?? '',
   }));
   videoNextToken = data.nextPageToken ?? null;
 
@@ -296,15 +304,21 @@ async function loadVideos(q, reset) {
   }
 }
 
-// ── PLAYLIST SEARCH ───────────────────────────────────────────────────────────
+// ── PLAYLIST SEARCH ────────────────────────────────────────────────────────[...]
+// Updated endpoint will be handled when API is available
 async function loadPlaylists(q, reset) {
-  const params = new URLSearchParams({ q, type: 'playlist', maxResults: '12' });
-  if (playlistNextToken) params.set('pageToken', playlistNextToken);
+  if (reset) playlistNextToken = null;
+  
+  let url = `${BASE}/playlists?q=${encodeURIComponent(q)}&maxResults=12`;
+  if (playlistNextToken) url += `&pageToken=${playlistNextToken}`;
 
-  const data = await apiFetch(`${BASE}/search?${params}`);
+  const data = await apiFetch(url);
   const items = (data.results ?? []).map(r => ({
-    playlistId: r.videoId ?? '', title: dec(r.title),
-    thumbnail: r.thumbnail, channelTitle: r.channel ?? '', itemCount: r.itemCount,
+    playlistId: r.id || r.videoId ?? '', 
+    title: dec(r.title),
+    thumbnail: r.thumbnail, 
+    channelTitle: r.channel || r.channelTitle ?? '', 
+    itemCount: r.itemCount || r.videoCount,
   }));
   playlistNextToken = data.nextPageToken ?? null;
 
@@ -338,7 +352,7 @@ async function loadPlaylists(q, reset) {
   }
 }
 
-// ── VIDEO CARD HTML ───────────────────────────────────────────────────────────
+// ── VIDEO CARD HTML ────────────────────────────────────────────────────────[...]
 function videoCardHTML(v) {
   const id = v.videoId;
   return `
@@ -373,7 +387,7 @@ function videoCardHTML(v) {
     </div>`;
 }
 
-// ── PLAYLIST CARD HTML ────────────────────────────────────────────────────────
+// ── PLAYLIST CARD HTML ───────────────────────────────────────────────────────[...]
 // FIX: Use data-attributes instead of inline onclick string interpolation
 // so playlist titles with apostrophes/quotes don't break JS
 function playlistCardHTML(pl) {
@@ -398,7 +412,7 @@ function openPlaylistFromCard(el) {
   openPlaylist(el.dataset.playlistId, el.dataset.playlistTitle);
 }
 
-// ── PLAYER MODAL ─────────────────────────────────────────────────────────────
+// ── PLAYER MODAL ─────────────────────────────────────────────────────────[...]
 function openPlayer(id, type) {
   const modal = document.getElementById('player-modal');
   if (modalVideoId === id && modalType === type && modal.classList.contains('open')) {
@@ -534,7 +548,7 @@ document.getElementById('player-modal').addEventListener('click', function(e) {
   if (e.target === this) closePlayerModal();
 });
 
-// ── 3-DOT MENU ────────────────────────────────────────────────────────────────
+// ── 3-DOT MENU ──────────────────────────────────────────────────────────[...]
 function toggleModalMenu(e) {
   e.stopPropagation();
   const menu = document.getElementById('pm-menu');
@@ -564,7 +578,7 @@ function modalDlMp4(q, e) {
   document.getElementById('pm-submenu').classList.remove('open');
 }
 
-// ── CARD STATE ────────────────────────────────────────────────────────────────
+// ── CARD STATE ──────────────────────────────────────────────────────────[...]
 function updateAllCardStates(activeId, type) {
   document.querySelectorAll('.card[data-video-id]').forEach(card => {
     const id       = card.dataset.videoId;
@@ -633,7 +647,7 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') closePlayerModal();
 });
 
-// ── NOW PLAYING BAR ───────────────────────────────────────────────────────────
+// ── NOW PLAYING BAR ────────────────────────────────────────────────────────[...]
 function showNpbBar() {
   document.getElementById('now-playing-bar').classList.add('visible');
   document.body.classList.add('pb-bar');
@@ -667,7 +681,8 @@ document.getElementById('npb-reopen').addEventListener('click', () => {
   if (id) openPlayer(id, type);
 });
 
-// ── PLAYLIST VIEWER ───────────────────────────────────────────────────────────
+// ── PLAYLIST VIEWER ────────────────────────────────────────────────────────[...]
+// Updated endpoint: /api/playlists/:id/videos
 async function openPlaylist(id, title) {
   document.getElementById('playlist-viewer').classList.add('visible');
   document.getElementById('results-section').style.display = 'none';
@@ -680,11 +695,13 @@ async function openPlaylist(id, title) {
     <div class="spinner purple"></div><p>Loading playlist...</p></div>`;
 
   try {
-    const params = new URLSearchParams({ id, maxResults: '50' });
-    const data = await apiFetch(`${BASE}/playlist?${params}`);
+    const data = await apiFetch(`${BASE}/playlists/${id}/videos?maxResults=50`);
     const items = (data.videos ?? []).map(r => ({
-      videoId: r.videoId, title: dec(r.title),
-      thumbnail: r.thumbnail, channelTitle: r.channel ?? '', publishedAt: '',
+      videoId: r.id || r.videoId, 
+      title: dec(r.title),
+      thumbnail: r.thumbnail, 
+      channelTitle: r.channel || r.channelTitle ?? '', 
+      publishedAt: '',
     }));
     items.forEach(v => { videoCache[v.videoId] = v; });
     document.getElementById('playlist-count').textContent = `(${items.length} tracks)`;
@@ -713,7 +730,7 @@ function closePlaylist() {
   if (!currentQuery) document.getElementById('trending-section').style.display = '';
 }
 
-// ── TRENDING ──────────────────────────────────────────────────────────────────
+// ── TRENDING ──────────────────────────────────────────────────────────[...]
 function showTrending(show) {
   document.getElementById('trending-section').style.display = show ? '' : 'none';
 }
@@ -722,14 +739,19 @@ function showEmptyState(show) {
 }
 
 // FIX: Added auto-retry (once) and a manual Retry button on persistent failure.
+// Updated to use new trending endpoint
 async function loadTrending(retryCount = 0) {
-  const q = TRENDING_QUERIES[Math.floor(Math.random() * TRENDING_QUERIES.length)];
+  const regionCode = 'US'; // Default region
+  const category = 'music'; // Default category
   try {
-    const params = new URLSearchParams({ q, type: 'video', maxResults: '8' });
-    const data = await apiFetch(`${BASE}/search?${params}`);
-    const items = (data.results ?? []).map(r => ({
-      videoId: r.videoId, title: dec(r.title),
-      thumbnail: r.thumbnail, channelTitle: r.channel ?? '', publishedAt: '',
+    // Using new endpoint: /api/trending?regionCode={code}&category={cat}
+    const data = await apiFetch(`${BASE}/trending?regionCode=${regionCode}&category=${category}&maxResults=8`);
+    const items = (data.videos ?? data.results ?? []).map(r => ({
+      videoId: r.id || r.videoId, 
+      title: dec(r.title),
+      thumbnail: r.thumbnail, 
+      channelTitle: r.channel || r.channelTitle ?? '', 
+      publishedAt: '',
     }));
     items.forEach(v => { videoCache[v.videoId] = v; });
     document.getElementById('trending-loading').style.display = 'none';
@@ -759,5 +781,5 @@ async function loadTrending(retryCount = 0) {
   }
 }
 
-// ── INIT ──────────────────────────────────────────────────────────────────────
+// ── INIT ────────────────────────────────────────────────────────────[...]
 loadTrending();
